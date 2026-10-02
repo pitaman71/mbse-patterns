@@ -1,0 +1,363 @@
+{
+  "root": "s0",
+  "objects": {
+    "s0": {
+      "constraints": [
+        {
+          "constraint": {
+            "$ref": "s1",
+            "$schema": "Patterns.Constraint"
+          },
+          "index": 0
+        },
+        {
+          "constraint": {
+            "$ref": "s2",
+            "$schema": "Patterns.Constraint"
+          },
+          "index": 1
+        },
+        {
+          "constraint": {
+            "$ref": "s3",
+            "$schema": "Patterns.Constraint"
+          },
+          "index": 2
+        },
+        {
+          "constraint": {
+            "$ref": "s4",
+            "$schema": "Patterns.Constraint"
+          },
+          "index": 3
+        }
+      ]
+    },
+    "s1": {
+      "schema": "Contact",
+      "name": "adult",
+      "description": "of age: 18 or older",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s5",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s2": {
+      "schema": "Contact",
+      "name": "adults-have-phones",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s6",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s3": {
+      "schema": "Contact",
+      "name": "named",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s7",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s4": {
+      "schema": "Phone",
+      "name": "numbered",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s8",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s5": {
+      "kind": "operation",
+      "name": "ge",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s9",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s10",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s6": {
+      "kind": "operation",
+      "name": "implies",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s5",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s11",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s7": {
+      "kind": "operation",
+      "name": "and",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s12",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s13",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s8": {
+      "kind": "operation",
+      "name": "or",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s14",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s15",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s9": {
+      "kind": "operation",
+      "name": "get",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s16",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s17",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s10": {
+      "kind": "literal",
+      "int": 18
+    },
+    "s11": {
+      "kind": "operation",
+      "name": "ge",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s18",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s19",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s12": {
+      "kind": "operation",
+      "name": "has",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s16",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s20",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s13": {
+      "kind": "operation",
+      "name": "ne",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s21",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s22",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s14": {
+      "kind": "operation",
+      "name": "has",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s16",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s23",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s15": {
+      "kind": "literal",
+      "bool": false
+    },
+    "s16": {
+      "kind": "variable",
+      "name": "this"
+    },
+    "s17": {
+      "kind": "literal",
+      "str": "age"
+    },
+    "s18": {
+      "kind": "operation",
+      "name": "count",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s24",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s19": {
+      "kind": "literal",
+      "int": 1
+    },
+    "s20": {
+      "kind": "literal",
+      "str": "name"
+    },
+    "s21": {
+      "kind": "operation",
+      "name": "get",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s16",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s25",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s22": {
+      "kind": "literal",
+      "str": ""
+    },
+    "s23": {
+      "kind": "literal",
+      "str": "number"
+    },
+    "s24": {
+      "kind": "operation",
+      "name": "entries",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s16",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s26",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s25": {
+      "kind": "literal",
+      "str": "name"
+    },
+    "s26": {
+      "kind": "literal",
+      "str": "phones"
+    }
+  }
+}

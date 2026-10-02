@@ -1,0 +1,42 @@
+{
+  "name": "@mbse/patterns",
+  "version": "0.1.0",
+  "description": "Constraints, queries and patterns over mbse-schemas data: rules as constraints, validated and queried, and (later) populations to generate and characterize (TypeScript implementation)",
+  "keywords": [
+    "constraints",
+    "queries",
+    "patterns",
+    "validation",
+    "mbse",
+    "sysml",
+    "interface",
+    "test data"
+  ],
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "postinstall": "python3 ../scripts/siblings.py check && npm --prefix ../../mbse-schemas/typescript5 install --no-audit --no-fund && npm --prefix ../../mbse-expressions/typescript5 install --no-audit --no-fund",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tests/run-notebooks.ts --typecheck",
+    "conformance": "tsx src/Conformance/write.ts",
+    "coverage": "c8 --check-coverage --100 tsx tests/run-notebooks.ts --typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "c8": "^11.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "yaml": "^2.9.1"
+  },
+  "dependencies": {
+    "@mbse/schemas": "file:../../mbse-schemas/typescript5",
+    "@mbse/expressions": "file:../../mbse-expressions/typescript5"
+  }
+}

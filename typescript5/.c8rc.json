@@ -1,0 +1,14 @@
+{
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "tests/**",
+    "src/Conformance/**"
+  ],
+  "reporter": [
+    "text"
+  ],
+  "all": true,
+  "reports-dir": "coverage"
+}
