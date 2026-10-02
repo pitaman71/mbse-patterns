@@ -8,30 +8,42 @@
  */
 
 import { Expressions as E } from "@mbse/expressions";
-import type { Schemas, Stores } from "@mbse/schemas/Framework";
+import { Proxies, Schemas as S, type Stores } from "@mbse/schemas/Framework";
 import type { Visitable } from "@mbse/schemas/Framework/Visitors";
 
 import * as C from "../Constraints.js";
 
-export const CASES = ["constraints", "empty"];
+export const CASES = ["predicates", "empty"];
 
-export function build(): Map<string, readonly [Schemas.OfObject.Data, Visitable, Stores.Store]> {
-  // --- constraints: two schemas, a description, a rule shared by two constraints, every literal kind Basic rules use ---
-  const self = E.variable("this");
-  const adult = self.age.ge(18n).data;
-  const hasPhone = E.operation("count", E.operation("entries", self, "phones")).ge(1n).data;
-  const constraints = new C.Set([
-    new C.Constraint("Contact", "adult", adult, "of age: 18 or older"),
-    new C.Constraint("Contact", "adults-have-phones", E.operation("implies", adult, hasPhone)),
-    new C.Constraint("Contact", "named", self.has("name").and_(self.name.ne(""))),
-    new C.Constraint("Phone", "numbered", self.has("number").or_(E.literal(false))),
-  ]);
+export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Stores.Store]> {
+  const text = (name: string) => (p: any) => p.name(name).of((t: any) => t.as_native(String));
+  const Phones = new S.OfRelation.Builder().name("Phones").links("owner", "phone").unique("owner").create(); // a phone has one owner
+  const Phone = new S.OfObject.Builder().name("Phone").ref().properties(text("number")).relations(
+    (r: any) => r.name("owners").of(Phones).me("phone")).create();
+  const Contact = new S.OfObject.Builder().name("Contact").ref().properties(
+    text("name"), (p: any) => p.name("age").of((t: any) => t.as_native(BigInt))).relations(
+    (r: any) => r.name("phones").of(Phones).me("owner")).create();
+  const schemas = new Proxies.OfStore();
+  for (const schema of [Contact, Phone, Phones]) schemas.register(schema);
+  const store = new C.OfStore(schemas);
 
-  // --- empty: a set of no constraints ---
-  const empty = new C.Set([]);
+  // --- predicates: one and two symbols, a description, a rule shared by two predicates, a hop through a relation ---
+  const [the, c, p] = [E.variable("the"), E.variable("c"), E.variable("p")];
+  const adult = the.age.ge(18n).data;
+  const hasPhone = E.operation("count", E.operation("entries", the, "phones")).ge(1n).data;
+  const predicates = new C.OfSet.Builder().predicates(
+    new C.OfPredicate.Builder().name("IsAnAdult").description("18 or older").symbols({ the: Contact }).rule(adult).create(),
+    (b) => b.name("AdultsHavePhones").symbols({ the: Contact }).rule(E.operation("implies", adult, hasPhone)),
+    (b) => b.name("OwnsNumbered").symbols({ c: Contact, p: Phone }).rule(
+      E.quantifier("any", "e", E.operation("entries", c, "phones"), E.variable("e").phone.eq(p))
+        .and_(p.has("number"))),
+  ).create();
+
+  // --- empty: a set of no predicates ---
+  const empty = new C.OfSet.Builder().create();
 
   return new Map([
-    ["constraints", [C.Set.Schema, constraints, C.Builders] as const],
-    ["empty", [C.Set.Schema, empty, C.Builders] as const],
+    ["predicates", [C.OfSet.Schema, predicates, store] as const],
+    ["empty", [C.OfSet.Schema, empty, store] as const],
   ]);
 }

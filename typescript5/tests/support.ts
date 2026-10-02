@@ -28,28 +28,39 @@ export function same(a: Iterable<unknown>, b: Iterable<unknown>): boolean {
   return x.length === y.length && x.every((item, i) => item === y[i]);
 }
 
+/** Whether two plain values are equal, as Python's `==` compares them: records, arrays and natives. */
+export function equal(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((item, i) => equal(item, b[i]));
+  if (a !== null && b !== null && typeof a === "object" && typeof b === "object" && !Array.isArray(a) && !Array.isArray(b)) {
+    const [x, y] = [Object.entries(a), Object.entries(b)];
+    return x.length === y.length && x.every(([k, v]) => k in b && equal(v, (b as Record<string, unknown>)[k]));
+  }
+  return a === b;
+}
+
 /** Property Spec for a native-typed property. */
 export function native(name: string, kind: unknown = String) {
   return (p: any) => p.name(name).of((t: any) => t.as_native(kind));
 }
 
-// An address book: a directory (the store's root) lists contacts, and contacts have phones.
-export const Listed = new S.OfRelation.Builder().links("directory", "contact").create();
-export const Phones = new S.OfRelation.Builder().links("owner", "phone").properties(native("label")).create();
-export const Directory = new S.OfObject.Builder().ref().singleton("book.Directory").relations(
+// An address book: a directory (the store's root) lists contacts, and contacts own phones, each phone one owner.
+export const Listed = new S.OfRelation.Builder().name("Listed").links("directory", "contact").create();
+export const Phones = new S.OfRelation.Builder().name("Phones").links("owner", "phone").properties(native("label")).unique(
+  "owner", "label").create(); // the phone determines its one entry: its owner and label
+export const Directory = new S.OfObject.Builder().name("Directory").ref().singleton("book.Directory").relations(
   (r: any) => r.name("contacts").of(Listed).me("directory")).create();
-export const Contact = new S.OfObject.Builder().ref().properties(native("name"), native("age", BigInt)).relations(
+export const Contact = new S.OfObject.Builder().name("Contact").ref().properties(native("name"), native("age", BigInt)).relations(
   (r: any) => r.name("directories").of(Listed).me("contact"),
   (r: any) => r.name("phones").of(Phones).me("owner")).create();
-export const Phone = new S.OfObject.Builder().ref().properties(native("number")).relations(
+export const Phone = new S.OfObject.Builder().name("Phone").ref().properties(native("number")).relations(
   (r: any) => r.name("owners").of(Phones).me("phone")).create();
-export const BOOK = new Map<string, S.OfObject.Data | S.OfRelation.Data>([
-  ["Directory", Directory], ["Contact", Contact], ["Phone", Phone], ["Listed", Listed], ["Phones", Phones]]);
+export const BOOK = [Directory, Contact, Phone, Listed, Phones];
 
 /** A store of the address book's schemas, whose data is what its directory lists. */
-export function book(): Proxies.OfStore {
+export function book(): any {
   const store = new Proxies.OfStore();
-  for (const [name, schema] of BOOK) store.register(name, schema);
+  for (const schema of BOOK) store.register(schema);
   return store;
 }
 

@@ -1,37 +1,48 @@
 # mbse-patterns
 
-Constraints and queries over [mbse-schemas](https://github.com/pitaman71/mbse-schemas) data, written with the rules of
-[mbse-expressions](https://github.com/pitaman71/mbse-expressions). A constraint, such as "every adult contact has a
-phone", is a named rule about one schema's objects, kept as data beside the schemas: stored, sent and validated like any
-other data. Validators check data against constraints; queries select a store's objects by a rule, streaming the
-matches lazily.
+Predicates and queries over [mbse-schemas](https://github.com/pitaman71/mbse-schemas) data, written with the rules of
+[mbse-expressions](https://github.com/pitaman71/mbse-expressions). A predicate, such as "a contact is an adult" or "a
+contact's phone has a number", is a named rule over symbols, each bound to an object of a schema, kept as data beside
+the schemas: stored, sent and validated like any other data. Validators check data against predicates; queries find a
+store's matches for a predicate, streaming them lazily, planned from the rule's shape.
 
 ```python
-from mbse.Expressions import Expressions as E
+from mbse.Expressions.Dialects.Python import Text
 from mbse.Patterns import Constraints, Queries, Validators
 
-this = E.variable("this")
-rules = Constraints.Set([Constraints.Constraint("Contact", "adult", this.age.ge(18))])
-Validators.Validate(store, rules).Reachable(Contact, ann)        # ["Contact#0: 'adult' is unknown"], say
-Queries.select(store, "Contact", this.age.ge(E.variable("min")), {"min": 65})   # an iterator over the matches
+IsAnAdult = (
+    Constraints.OfPredicate.Builder()
+    .name("IsAnAdult")
+    .description("18 or older")
+    .symbols({"the": Contact})
+    .rule(Text.FromFunction(lambda the: the.age >= 18))
+    .create()
+)
+Validators.Validate(store, [IsAnAdult]).Reachable(Contact, ann)  # ["the=Contact#0: 'IsAnAdult' is unknown"], say
+Queries.select(store, IsAnAdult)                                  # an iterator over the matches: {"the": ann}, ...
 ```
 
 ```typescript
 import { Expressions as E } from "@mbse/expressions";
 import { Constraints, Queries, Validators } from "@mbse/patterns";
 
-const self = E.variable("this");
-const rules = new Constraints.Set([new Constraints.Constraint("Contact", "adult", self.age.ge(18n))]);
-Validators.Validate(store, rules).Reachable(Contact, ann);
-Queries.select(store, "Contact", self.age.ge(E.variable("min")), { min: 65n });
+const IsAnAdult = new Constraints.OfPredicate.Builder()
+  .name("IsAnAdult")
+  .description("18 or older")
+  .symbols({ the: Contact })
+  .rule(E.variable("the").age.ge(18n))
+  .create();
+Validators.Validate(store, [IsAnAdult]).Reachable(Contact, ann);
+Queries.select(store, IsAnAdult);
 ```
 
-Patterns (populations of objects: weights over constraints, with distributions of properties and relations),
+Patterns (populations of objects: weights over predicates, with distributions of properties and relations),
 generators of data from patterns, byte-identical in both languages from a seed, and characterizers that fit patterns
 to data are designed ([docs/PATTERNS.md](docs/PATTERNS.md)) for the next releases.
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
-(`@mbse/patterns`), with the same API, the same messages and byte-identical JSON.
+(`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a rule from a
+lambda (`Text.FromFunction`); TypeScript writes rules with mbse-expressions' writers.
 
 ## Getting started
 

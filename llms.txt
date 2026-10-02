@@ -1,8 +1,8 @@
 # mbse-patterns
 
-> Constraints, queries and (planned) patterns over mbse-schemas data, with mbse-expressions' rules. A constraint is a named Basic rule about one schema's objects, kept as data beside the schemas; validators check data against constraints, three-valued (unknown is not false), and queries select a store's objects by a rule, streaming lazily, through a queryable-store protocol with an in-memory implementation over any store. Equivalent Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations write byte-identical JSON.
+> Predicates, queries and (planned) patterns over mbse-schemas data, with mbse-expressions' rules. A predicate is a named Basic rule over symbols, each bound to an object of a schema, kept as data beside the schemas and built fluently, as schemas are; it applies to matches, combinations of objects. Validators check data against predicates, three-valued (unknown is not false), and queries find a store's matches, streaming lazily, planned from the rule's shape (early tests, hops through relations, `unique` clauses), through a queryable-store protocol with an in-memory implementation over any store. Equivalent Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations write byte-identical JSON.
 
-Patterns (weights over constraints, with distributions of properties and relations), byte-identical pseudorandom generators and streaming characterizers are designed for the next releases.
+Patterns (weights over predicates, with distributions of properties and relations), byte-identical pseudorandom generators and streaming characterizers are designed for the next releases.
 
 ## Using it
 
@@ -11,7 +11,7 @@ Patterns (weights over constraints, with distributions of properties and relatio
 
 ## Design
 
-- [PATTERNS.md](https://github.com/pitaman71/mbse-patterns/blob/main/docs/PATTERNS.md): constraints, validators and queries, the planned patterns, generators and characterizers, and the open questions
+- [PATTERNS.md](https://github.com/pitaman71/mbse-patterns/blob/main/docs/PATTERNS.md): predicates, validators and queries, the planned patterns, generators and characterizers, and the open questions
 
 ## Optional
 

@@ -26,24 +26,25 @@ def native(name: str, kind: type = str) -> Any:
     return lambda p: p.name(name).of(lambda t: t.as_native(kind))
 
 
-# An address book: a directory (the store's root) lists contacts, and contacts have phones.
-Listed = S.OfRelation.Builder().links("directory", "contact").create()
-Phones = S.OfRelation.Builder().links("owner", "phone").properties(native("label")).create()
-Directory = S.OfObject.Builder().ref().singleton("book.Directory").relations(
+# An address book: a directory (the store's root) lists contacts, and contacts own phones, each phone one owner.
+Listed = S.OfRelation.Builder().name("Listed").links("directory", "contact").create()
+Phones = S.OfRelation.Builder().name("Phones").links("owner", "phone").properties(native("label")).unique(
+    "owner", "label").create()  # the phone determines its one entry: its owner and label
+Directory = S.OfObject.Builder().name("Directory").ref().singleton("book.Directory").relations(
     lambda r: r.name("contacts").of(Listed).me("directory")).create()
-Contact = S.OfObject.Builder().ref().properties(native("name"), native("age", int)).relations(
+Contact = S.OfObject.Builder().name("Contact").ref().properties(native("name"), native("age", int)).relations(
     lambda r: r.name("directories").of(Listed).me("contact"),
     lambda r: r.name("phones").of(Phones).me("owner")).create()
-Phone = S.OfObject.Builder().ref().properties(native("number")).relations(
+Phone = S.OfObject.Builder().name("Phone").ref().properties(native("number")).relations(
     lambda r: r.name("owners").of(Phones).me("phone")).create()
-BOOK = {"Directory": Directory, "Contact": Contact, "Phone": Phone, "Listed": Listed, "Phones": Phones}
+BOOK = (Directory, Contact, Phone, Listed, Phones)
 
 
 def book() -> Proxies.OfStore:
     """A store of the address book's schemas, whose data is what its directory lists."""
     store = Proxies.OfStore()
-    for name, schema in BOOK.items():
-        store.register(name, schema)
+    for schema in BOOK:
+        store.register(schema)
     return store
 
 

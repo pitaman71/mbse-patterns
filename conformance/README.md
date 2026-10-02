@@ -7,5 +7,5 @@ byte-identical across implementations, and that each reads every other's back.
 
 | Case | What it holds |
 |---|---|
-| `constraints` | a set of constraints of two schemas: a description, a rule shared by two constraints (written once), comparisons, `implies`, `count` of `entries`, `has`, a string and a bool literal |
-| `empty` | a set of no constraints |
+| `predicates` | a set of predicates of one and two symbols: a description, a rule shared by two predicates (written once), symbols written by their schemas' names, comparisons, `implies`, `count` of `entries`, a quantifier relating two symbols, `has` |
+| `empty` | a set of no predicates |
