@@ -13,11 +13,13 @@ of every symbol to an object of its schema. It is built as schemas are, by a flu
         .create()
     )
 
-`.rule(spec)` takes any Basic `Spec`: data, a writer, or what `Python.Text.FromFunction` reads from a function. A set,
+`.rule(spec)` takes any spec of the predicate algebra (`Predicates`, which extends Basic): data, a writer, or what
+`Python.Text.FromFunction` reads from a function. A predicate without symbols is a statement about the whole store,
+e.g. that every contact has a phone. A set,
 `OfSet`, gathers predicates in order: `OfSet.Builder().predicates(IsAnAdult, lambda p: p.name(...)...)`. Nothing
-validates until asked: `validate()` reports a missing name or rule, no symbols, a symbol whose schema is not a named
-reference object schema, the rule's problems as a core Basic rule whose free names are the symbols, and, in a set, two
-predicates with one name.
+validates until asked: `validate()` reports a missing name or rule, a symbol whose schema is not a named reference object
+schema, the rule's problems as a rule of the algebra whose free names are the symbols, and, in a set, two predicates
+with one name.
 
 Predicates and sets are mbse-schemas reference objects with meta-schemas (`Patterns.Predicate`, `Patterns.Set`), so a
 set is stored and sent like any data. A symbol's schema is written as a property's type is: by its name, or inline; a
@@ -35,9 +37,10 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from mbse.Expressions import Expressions
 from mbse.Expressions.Framework import Terms
 from mbse.Schemas.Framework import Bindings, Modules, Schemas, Stores, Visitors
+
+from . import Predicates
 
 __all__ = ["OfPredicate", "OfSet", "Members", "OfStore", "Builders", "register", "check", "PREDICATE", "SET", "MEMBERS"]
 
@@ -95,18 +98,16 @@ class _PredicateData:
     name: str | None = None
     description: str | None = None
     symbols: dict[str, Any] = field(default_factory=dict)  # symbol -> schema
-    rule: Any = None  # a Basic expression
+    rule: Any = None  # an expression of the predicate algebra
 
     def validate(self) -> list[str]:
         label = f"predicate {self.name!r}"
         problems = [f"{label}: a predicate needs a {what}" for what, value in (("name", self.name), ("rule", self.rule))
                     if value is None]
-        if not self.symbols:
-            problems.append(f"{label}: a predicate needs at least one symbol")
         for symbol, schema in self.symbols.items():
             if not (isinstance(schema, Schemas.OfObject.Data) and schema.ref and schema.name is not None):
                 problems.append(f"{label}: symbol {symbol!r} needs a named reference object schema")
-        rule = [] if self.rule is None else self.rule.validate(bound=tuple(self.symbols), core=True)
+        rule = [] if self.rule is None else Predicates.DIALECT.validate(self.rule, bound=tuple(self.symbols), core=True)
         return problems + [f"{label}: {problem}" for problem in rule]
 
     def identity(self) -> Any:
@@ -139,8 +140,8 @@ class _PredicateBuilder(_Builder):
         return self
 
     def rule(self, spec: Any) -> _PredicateBuilder:
-        """The rule, a Basic `Spec` whose free names are the symbols."""
-        self._fields["rule"] = Expressions.OfAny.resolve(spec)
+        """The rule, a spec of the predicate algebra whose free names are the symbols."""
+        self._fields["rule"] = Predicates.DIALECT.resolve(spec)
         return self
 
 
@@ -227,7 +228,7 @@ def _linked(entry: Bindings.Entry, link: str, kind: Any, what: str) -> Any:
     if target is None:
         raise ValueError(f"link {link!r} is not set")
     if not isinstance(target, kind):
-        raise TypeError(f"{what} must be {'a Basic expression' if what == 'a rule' else 'a predicate'}")
+        raise TypeError(f"{what} must be {'an expression' if what == 'a rule' else 'a predicate'}")
     return target
 
 
@@ -250,7 +251,7 @@ def _make_predicate(store: Stores.Store, state: Bindings.State) -> _PredicateDat
     rules = state.entries.get("rule", [])  # none yet while a snapshot is read: its entries come after its objects
     if len(rules) > 1:
         raise ValueError(f"a predicate has one rule, got {len(rules)}")
-    rule = _linked(rules[0], "argument", Expressions.DIALECT.classes, "a rule") if rules else None
+    rule = _linked(rules[0], "argument", Predicates.DIALECT.terms(), "a rule") if rules else None
     symbols = {symbol["name"]: Modules.resolve(store, symbol["type"]) for symbol in state.values.get("symbols", [])}
     return _PredicateData(state.values.get("name"), state.values.get("description"), symbols, rule)
 
@@ -273,8 +274,8 @@ _SET = Bindings.Binding(OfSet.Schema, _read_set, _make_set, _assign(_make_set))
 
 
 def _basic() -> list[tuple[Schemas.OfObject.Data, Any]]:
-    """Basic's kinds, as `Bindings.OfStore` takes them."""
-    dialect = Expressions.DIALECT
+    """The predicate algebra's kinds, Basic's included, as `Bindings.OfStore` takes them."""
+    dialect = Predicates.DIALECT
     return [(kind.Schema, dialect.builders[kind.KIND]) for kind in dialect.classes]  # type: ignore[attr-defined]
 
 
@@ -297,9 +298,9 @@ symbols' schemas are inline."""
 
 
 def register(store: Any) -> Any:
-    """Registers the meta-schemas of predicates and sets, and Basic's, in `store` (e.g. a `Proxies.OfStore`), skipping
-    those it already holds. Returns the store."""
-    Expressions.DIALECT.register(store)
+    """Registers the meta-schemas of predicates and sets, and the algebra's (Basic's included), in `store` (e.g. a
+    `Proxies.OfStore`), skipping those it already holds. Returns the store."""
+    Predicates.DIALECT.register(store)
     for schema in (OfPredicate.Schema, OfSet.Schema, Members):
         if schema.name not in store.names():
             store.register(schema)

@@ -43,12 +43,15 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
 3. **Unknown is not false.** A rule reading an absent property is unknown; a validator reports it as unknown by
    default (`unknown` is `report`, `ignore` or `violation`), and a query leaves it out unless asked.
 4. **Queries see the store's data, not everything built.** A schema's extent is what the store's singletons reach.
-5. **Shape the rule for the planner.** Top-level `and`s are tested as early as their symbols allow, and
-   `any(e in entries(a, 'phones'), e.phone == b)` takes `b` from `a`'s entries instead of scanning; `explain` shows the
+5. **Links are predicates.** `Predicates` extends Basic with `forall`, `exists` and `count` over a schema's objects,
+   `linked(a, "phones", b)` and weighted `choice`s: mandatory, forbidden and possible links are rules, and a predicate
+   without symbols is a statement about the whole store.
+6. **Shape the rule for the planner.** Top-level `and`s are tested as early as their symbols allow, and
+   `linked(a, "phones", b)` takes `b` from `a`'s entries instead of scanning; `explain` shows the
    plan. Relations' `unique` clauses tell it when such a hop gives at most one object.
-6. **Reading predicates resolves their schemas by name**: read through `Constraints.OfStore(store)`, with the store that
+7. **Reading predicates resolves their schemas by name**: read through `Constraints.OfStore(store)`, with the store that
    registers them. Writing needs no store.
-7. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`), and
+8. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`), and
    a validator's options are an object (`{ unknown: "ignore" }`).
 
 ## Load the reference for your task

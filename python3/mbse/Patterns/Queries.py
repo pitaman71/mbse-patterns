@@ -3,7 +3,8 @@
 `QueryableStore` is the protocol: an mbse-schemas store (`Stores.Store`) that also answers
 `select(predicate, variables=None, unknown=False)`, an iterator over the predicate's matches among the store's data for
 which its rule holds. A match maps each symbol to an object of the symbol's schema, from the schema's extent (what the
-store's singletons reach: objects the program built but never linked to the store's data are not found). `variables`
+store's singletons reach: objects the program built but never linked to the store's data are not found); a predicate
+without symbols has one match, empty, when it holds. `variables`
 binds the rule's other names; `unknown` also yields the matches for which the rule is unknown. The predicate is checked
 when `select` is called, which raises for one that cannot be a query; the extents are read only as matches are asked for.
 
@@ -11,12 +12,11 @@ The matches are the cross product of the symbols' extents, filtered by the rule;
 implementation's to choose from the rule's shape. `Scan(store)` makes any store queryable, in memory, delegating every
 `Stores.Store` method to it, and plans each query:
 
-- What the variables alone determine is evaluated once, first (`Partials`).
 - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match that fails
-  one is never extended.
-- A conjunct `any(e in entries(a, 'adjacency'), e.link == b)` relates two symbols through a relation: `b`'s candidates
-  are then the targets of `a`'s entries, not `b`'s whole extent. When one of the relation's `unique` clauses makes `a`'s
-  end determine the entry, there is at most one, and the hop is taken first.
+  one is never extended; those that read no symbol, only variables, are tested once, first.
+- A conjunct `linked(a, 'adjacency', b)`, or `any(e in entries(a, 'adjacency'), e.link == b)`, relates two symbols
+  through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
+  relation's `unique` clauses makes `a`'s end determine the entry, there is at most one, and the hop is taken first.
 - A symbol no hop reaches is scanned. Symbols that a hop from another could reach are scanned last, so that the hop is
   taken instead; otherwise symbols are scanned in their declared order.
 
@@ -29,11 +29,11 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from typing import Any, Protocol
 
-from mbse.Expressions import Expressions as E, Partials
+from mbse.Expressions import Expressions as E
 from mbse.Expressions.Framework import Symbolics
 from mbse.Schemas.Framework import Schemas, Stores, Validators as SchemaValidators, Visitors
 
-from .Validators import holds
+from . import Predicates
 
 __all__ = ["QueryableStore", "Scan", "select"]
 
@@ -71,8 +71,29 @@ class _Hop:
         self.source, self.adjacency, self.link, self.target, self.functional = source, adjacency, link, target, functional
 
 
+def _declared(schemas: Mapping[str, Schemas.OfObject.Data], source: str, adjacency: str | None, link: str | None
+              ) -> tuple[str, bool] | None:
+    """The link and whether the hop is functional, for a hop from `source` through `adjacency`, if there is one."""
+    declared = schemas[source].adjacencies.get(adjacency or "")
+    if declared is None or declared.relation is None:
+        return None
+    relation = declared.relation
+    others = [other for other in relation.links if other != declared.me]
+    link = link if link is not None else others[0] if len(others) == 1 else None
+    if link not in others:
+        return None
+    fields = {*relation.links, *relation.properties}
+    return link, any(fields - unique <= {declared.me} for unique in relation.uniques)  # type: ignore[return-value]
+
+
 def _hop(conjunct: Any, schemas: Mapping[str, Schemas.OfObject.Data]) -> _Hop | None:
-    """The hop a conjunct `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a` to `b`, if it is one."""
+    """The hop a conjunct `linked(a, 'adjacency', b)` or `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a`
+    to `b`, if it is one."""
+    if isinstance(conjunct, Predicates.OfLinked):
+        source, target = _variable(conjunct.source, schemas), _variable(conjunct.target, schemas)
+        found = None if source is None or target is None or source == target else _declared(
+            schemas, source, conjunct.adjacency, conjunct.link)
+        return None if found is None else _Hop(source, conjunct.adjacency, found[0], target, found[1])  # type: ignore[arg-type]
     if not (isinstance(conjunct, E.OfQuantifier.Data) and conjunct.quantifier == "any"):
         return None
     collection, body, item = conjunct.collection, conjunct.body, conjunct.name
@@ -85,14 +106,9 @@ def _hop(conjunct: Any, schemas: Mapping[str, Schemas.OfObject.Data]) -> _Hop | 
         if (isinstance(get, E.OfOperation.Data) and get.name == "get" and len(get.arguments) == 2
                 and _variable(get.arguments[0], {item}) is not None and source is not None and target is not None
                 and target not in (source, item)):
-            declared = schemas[source].adjacencies.get(adjacency or "")
             link = _text(get.arguments[1])
-            if declared is None or declared.relation is None or link not in declared.relation.links or link == declared.me:
-                return None
-            relation = declared.relation
-            fields = {*relation.links, *relation.properties}
-            functional = any(fields - unique <= {declared.me} for unique in relation.uniques)
-            return _Hop(source, adjacency, link, target, functional)  # type: ignore[arg-type]
+            found = None if link is None else _declared(schemas, source, adjacency, link)
+            return None if found is None else _Hop(source, adjacency, found[0], target, found[1])  # type: ignore[arg-type]
     return None
 
 
@@ -102,8 +118,6 @@ class _Plan:
 
     def __init__(self, store: Stores.Store, predicate: Any, variables: Mapping[str, Any]):
         symbols = dict(predicate.symbols)
-        if not symbols:
-            raise ValueError("a query needs a predicate with at least one symbol")
         for symbol, schema in symbols.items():
             if not (isinstance(schema, Schemas.OfObject.Data) and schema.ref and schema.name is not None):
                 raise ValueError(f"symbol {symbol!r} needs a named reference object schema")
@@ -111,12 +125,11 @@ class _Plan:
         for name in variables:
             if name in symbols:
                 raise ValueError(f"{name!r} is a symbol; it is not a variable")
-        rule = E.OfAny.resolve(predicate.rule)
-        problems = rule.validate(bound=(*symbols, *variables), core=True)
+        rule = Predicates.DIALECT.resolve(predicate.rule)
+        problems = Predicates.DIALECT.validate(rule, bound=(*symbols, *variables), core=True)
         if problems:
             raise ValueError(f"the predicate cannot be a query: {'; '.join(problems)}")
-        self.store, self.symbols, self.variables = store, symbols, dict(variables)
-        self.rule = Partials.OfAny(rule, variables)
+        self.store, self.symbols, self.variables, self.rule = store, symbols, dict(variables), rule
         conjuncts = [(c, Symbolics.free(c) & set(symbols)) for c in _conjuncts(self.rule)]
         hops = [hop for hop in (_hop(c, symbols) for c, _ in conjuncts) if hop is not None]
         self.order: list[tuple[str, _Hop | None]] = []
@@ -150,18 +163,17 @@ class _Plan:
         return lines
 
     def matches(self, unknown: bool) -> Iterator[Match]:
-        extents: dict[str, tuple[Any, ...]] = {}
+        evaluate = Predicates.Evaluator(self.store)  # reads each extent once, when first asked for
         scope = dict(self.variables)
-        if any(holds(test, scope) is False for test in self.first):
+        if any(Predicates.holds(evaluate, test, scope) is False for test in self.first):
             return
-        yield from self._extend(0, scope, extents, unknown)
+        yield from self._extend(0, scope, evaluate, unknown)
 
-    def _candidates(self, symbol: str, hop: _Hop | None, scope: dict[str, Any], extents: dict[str, Any]) -> list[Any]:
+    def _candidates(self, symbol: str, hop: _Hop | None, scope: dict[str, Any], evaluate: Predicates.Evaluator
+                    ) -> list[Any]:
         name = self.symbols[symbol].name
         if hop is None:
-            if name not in extents:
-                extents[name] = tuple(self.store.extent(name))
-            return list(extents[name])
+            return list(evaluate.extent(name))
         found: dict[Any, Any] = {}
         for entry in SchemaValidators.entries_of(scope[hop.source]).get(hop.adjacency, []):
             target = entry.targets.get(hop.link)
@@ -169,17 +181,18 @@ class _Plan:
                 found.setdefault(target.identity(), target)
         return list(found.values())
 
-    def _extend(self, depth: int, scope: dict[str, Any], extents: dict[str, Any], unknown: bool) -> Iterator[Match]:
+    def _extend(self, depth: int, scope: dict[str, Any], evaluate: Predicates.Evaluator, unknown: bool
+                ) -> Iterator[Match]:
         if depth == len(self.order):
-            result = holds(self.rule, scope)
+            result = Predicates.holds(evaluate, self.rule, scope)
             if result or (unknown and result is None):
                 yield {symbol: scope[symbol] for symbol in self.symbols}
             return
         symbol, hop = self.order[depth]
-        for candidate in self._candidates(symbol, hop, scope, extents):
+        for candidate in self._candidates(symbol, hop, scope, evaluate):
             inner = {**scope, symbol: candidate}
-            if all(holds(test, inner) is not False for test in self.tests[depth]):
-                yield from self._extend(depth + 1, inner, extents, unknown)
+            if all(Predicates.holds(evaluate, test, inner) is not False for test in self.tests[depth]):
+                yield from self._extend(depth + 1, inner, evaluate, unknown)
 
 
 class Scan:
@@ -211,6 +224,9 @@ class Scan:
 
     def extent(self, name: str) -> Any:
         return self.store.extent(name)
+
+    def random(self) -> Stores.Random:
+        return self.store.random()
 
     def select(self, predicate: Any, variables: Mapping[str, Any] | None = None, unknown: bool = False
                ) -> Iterator[Match]:

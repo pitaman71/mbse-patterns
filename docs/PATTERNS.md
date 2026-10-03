@@ -12,8 +12,9 @@ It is planned in three releases, each landed and reviewed before the next:
 | Release | Contents | Status |
 |---|---|---|
 | 0.1 | [Predicates](#predicates), [validators](#validators), [queries](#queries) and the queryable in-memory store | built |
-| 0.2 | [Distributions](#distributions), [patterns](#patterns-1), a specified [pseudorandom generator](#pseudorandom-numbers) and [generators](#generators) | designed |
-| 0.3 | [Characterizers](#characterizers), which fit patterns from streams of data | designed |
+| 0.2 | [The predicate algebra](#the-predicate-algebra) and [pseudorandom numbers](#pseudorandom-numbers) | built |
+| 0.3 | [Distributions](#distributions), [patterns](#patterns-1) and [generators](#generators) | designed |
+| 0.4 | [Characterizers](#characterizers), which fit patterns from streams of data | designed |
 
 ```
 python3/mbse/Patterns/, typescript5/src/
@@ -88,11 +89,11 @@ python3/mbse/Patterns/, typescript5/src/
   cross product of its symbols' extents, filtered by the rule; how the matches are found is the implementation's to
   choose, judiciously, from the rule's shape. `Scan(store)`, the in-memory implementation for any store, plans each
   query:
-  - What the variables alone determine is evaluated once, first (`Partials`); a rule they decide false yields
-    nothing. An object has no literal, so a variable bound to one stays a variable, bound for each match.
   - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a partial match
-    that fails one is never extended.
-  - A conjunct `any(e in entries(a, 'adjacency'), e.link == b)`, a hop, relates two symbols through a relation: `b`'s
+    that fails one is never extended; those that read only variables are tested once, first, and a rule they decide
+    false yields nothing.
+  - A conjunct `linked(a, 'adjacency', b)`, or `any(e in entries(a, 'adjacency'), e.link == b)`, a hop, relates two
+    symbols through a relation: `b`'s
     candidates are then the targets of `a`'s entries through `link`, those of `b`'s schema, not `b`'s whole extent.
   - The relation's `unique` clauses say how far a hop fans out: when one makes `a`'s end the key of the relation's
     entries (`unique(S)` with every field outside `S` being `a`'s link), `a` has at most one entry, and such hops are
@@ -105,59 +106,101 @@ python3/mbse/Patterns/, typescript5/src/
   a cache slice) implements `select` itself, translating the rule into its own query language where it can, and
   `select(store, ...)` asks a queryable store and scans any other.
 
+## The predicate algebra
+
+Built in 0.2. Basic's quantifiers (`all`, `any`, `count`) range over collections, such as an object's `entries`;
+nothing ranges over a schema's objects in a store, and links are reached only through `entries`. Mandatory, possible
+and forbidden links are statements about the store, so they need both.
+
+- **`Predicates` is a dialect extending Basic**, declared with `Terms.Declared(..., extends=Basic)` (mbse-expressions
+  0.2.3), so its trees may mix Basic's kinds and its own, Basic's writers hold its terms, and its writers give Basic
+  writers. Every Basic expression is a predicate's rule as before; the dialect adds:
+  - `extent(Schema)`, a schema's objects in the store, and the quantifiers `forall(x, Schema, body)`,
+    `exists(x, Schema, body)` and `count(x, Schema, body)`, whose collection is an extent and which bind `x` to each
+    of its objects;
+  - `linked(a, adjacency, b)`, which holds when one of `a`'s entries in `adjacency` links `b`, the relation's other
+    link (`linked(a, adjacency, link, b)` names the link, for a relation of more than two);
+  - `choice((weight, predicate), ...)`, a weighted disjunction of `option`s: it holds when any of them holds (Kleene's
+    disjunction), and its weights, positive and summing to 1, are how often each option is chosen by a generator, and
+    what a characterizer estimates.
+  - Their meta-schemas are `Patterns.OfExtent`, `Patterns.OfForall`, ... `Patterns.OfOption`.
+- **Links are mandatory, possible or forbidden by these terms**:
+  - mandatory: `forall(c, Contact, exists(p, Phone, linked(c, "phones", p)))`;
+  - forbidden: `forall(c, Contact, not(exists(p, Pager, linked(c, "pagers", p))))`;
+  - possible, 35% of the time: `forall(c, Contact, choice((0.35, exists(p, Pager, linked(c, "pagers", p))),
+    (0.65, not(exists(p, Pager, linked(c, "pagers", p))))))`.
+- **A predicate's symbols stay implicitly universal**; a predicate without symbols is a statement about the whole
+  store, checked once.
+- **Evaluating these terms needs the store**, which Basic's evaluator never has: `Evaluator(store)` is Basic's
+  interpreter with extents and links from the store, reading each extent once. `linked` could be written in Basic
+  (`any(e in entries(a, adjacency), e.link == b)`); the quantifiers over extents and `choice` cannot.
+- **The planner reads the terms directly**: a top-level `linked` between two symbols is a hop, as the `any` over
+  `entries` is; `exists` and `forall` stop at the first witness or counterexample. Planning inside quantifiers (a hop
+  within an `exists`) is an open question.
+
 ## Distributions
 
-Planned for 0.2. A pattern needs to say how values are distributed, as data that both implementations sample
-identically.
+Planned for 0.3. A pattern says how values are distributed, as data that both implementations sample identically.
 
-- **Distributions are a dialect.** `Distributions` is an mbse-expressions dialect, declared with `Terms.Declared` and
-  bound to its meta-schemas like Basic, so distributions are stored, validated and compared as expressions are. Its
-  kinds: `Constant(value)`, `Uniform(low, high)` (ints and floats), `Normal(mean, deviation)`, `Categorical(weights)`
-  over values or over predicates, `Poisson(rate)` and `Geometric(p)` (for counts), and `Mixture(weights, parts)`.
-  Parameters are Basic expressions, so one distribution may depend on another's sample (`Normal(this.age * 2, 1)`).
+- **Distributions are terms of the same dialect**: `Constant(value)`, `Uniform(low, high)` (ints and floats),
+  `Normal(mean, deviation)`, `Categorical((weight, value), ...)`, `Poisson(rate)` and `Geometric(p)` (for counts), and
+  `Mixture((weight, distribution), ...)`. Parameters are Basic expressions, so one distribution may depend on what is
+  already drawn (`Normal(the.age * 2, 1)`).
 - **A distribution has a domain**, inferred like a Basic expression's: `Normal` gives a float, `Poisson` an int, a
   `Categorical` its values' domain. A sample outside a property's schema (a float for an `int` property) is refused
   when the pattern is checked, not when it is sampled.
 
 ## Patterns
 
-Planned for 0.2. A pattern is a population of one schema's objects, layered:
+Planned for 0.3. A pattern is a population of one schema's objects: a predicate, with its weighted choices, and
+distributions for what the predicate leaves open.
 
-- **Weights over predicates.** A pattern divides a schema's population by predicates: 30% satisfy `senior`, 70% do
-  not. The weights are a `Categorical` over predicates of a `Set`; nested categoricals give conditional proportions
-  (of seniors, 90% have an email).
-- **Distributions within each part.** Within a part, each property has a distribution (`age ~ Normal(72, 5)` among
-  seniors) and each adjacency a distribution of its number of entries (`phones ~ Poisson(1.5)`) and of their targets
-  (a pattern of the target schema, or a choice among existing objects of the store).
-- **A pattern is consistent with its predicates.** A part's distributions must give objects that satisfy the part's
-  predicates; where they may not, the generator rejects and redraws, up to a bound, and reports the rejection rate.
-  Checking consistency statically, by a solver, is an open question.
-- **Patterns are data**, bound to their meta-schemas like predicates, and refer to the sets and predicates they
-  weigh.
+- **A pattern is built as predicates are**: `OfPattern.Builder().name("Contacts").of(Contact)
+  .where("IsSenior").property("age", Normal(72, 5)).relation("phones", Poisson(1.5), Phone)...create()`.
+- **It refers to predicates by name or inline**: `.where("IsSenior")` names a predicate, written as a reference and
+  resolved when read, as a schema is; `.where(lambda p: p.symbols(...).rule(...))` builds one in place, written in
+  place.
+- **Choices weigh the population**: a predicate's `choice` divides it (30% seniors, 70% not), and nested choices give
+  conditional proportions (of seniors, 90% have an email).
+- **Distributions fill what the predicate leaves open**: each property not decided by the chosen alternatives has a
+  distribution, and each adjacency a distribution of its number of entries and of their targets (a pattern of the
+  target schema, or a choice among existing objects of the store).
+- **A pattern is consistent with its predicate.** Where the distributions may give objects the chosen alternatives do
+  not allow, the generator rejects and redraws, up to a bound, and reports the rejection rate. Checking consistency
+  statically, by a solver, is an open question.
+- **Patterns are data**, with meta-schemas like predicates.
 
 ## Pseudorandom numbers
 
-Planned for 0.2. Generated data is byte-identical in Python and TypeScript from the same seed, as all output of the
-two implementations is.
+Built in mbse-schemas 0.4; sampling, in mbse-patterns 0.3, is planned. Generated data is byte-identical in Python and
+TypeScript from the same seed, as all output of the two implementations is, and the caller chooses the source.
 
-- **The generator is specified, not borrowed.** Neither Python's `random` nor JavaScript's `Math.random` is used. One
-  published generator (PCG32, or xoshiro256\*\*, chosen in 0.2) is implemented in both, on integers (Python `int`,
-  TypeScript `bigint`), with streams split deterministically per object and property, so that adding a property to a
-  pattern does not change the values drawn for the others.
-- **Sampling algorithms are specified too**: the bounded integer method, the float from 53 bits, the normal transform
-  (Box–Muller, not a ziggurat, so that it is exact to specify), Poisson by inversion. A conformance corpus of generated
-  data checks that both implementations produce the same bytes.
+- **`Stores.Random` is a protocol, and a store is equipped with one when it is made**:
+  `Proxies.OfStore(random=Stores.PCG32(42))`, `Bindings.OfStore(builders, relations, random=...)`. `store.random()`
+  gives it, and raises `LookupError` for a store made without one. The store is the root object, so its environment
+  (randomness, as a clock would be) lives there.
+- **The protocol is small**: `next_u32()`, the next 32 random bits as an int, and `split(key)`, an independent stream
+  determined by the source's seed and `key` alone, not by what was drawn before, so that each object and property draws
+  from its own stream and adding a property to a pattern does not change the values drawn for the others.
+- **`Stores.PCG32(seed, sequence)` is the reference source**, specified exactly (PCG-XSH-RR, 64-bit state, 32-bit
+  output) and implemented in both languages; `split(key)` seeds a new PCG32 from FNV-1a 64 of the key's UTF-8 bytes,
+  starting from the offset basis XOR the seed, with the same sequence. Any other source meets the protocol, at the cost
+  of byte-identity.
+- **Sampling is specified on top of the protocol**, in mbse-patterns, so any source gives the same samples from the
+  same words: a bounded integer by rejection, a float from 53 bits, a normal by Box–Muller, a Poisson by inversion. A
+  conformance corpus of generated data checks that both implementations produce the same bytes.
 
 ## Generators
 
-Planned for 0.2. `Generate(store, pattern, seed)` builds objects in a store, as the store's builders build any object,
-so generated data is ordinary data: validated, queried, serialized. A generator is a stream: it builds one object per
-step, with its value objects and the entries the pattern gives it, and links what it builds to the store's data as the
-pattern says (e.g. listed in a singleton directory), or leaves it transient.
+Planned for 0.3. `Generate(store, pattern, count)` builds objects with the store's builders, drawing from
+`store.random()`, split by object and property; generated data is ordinary data, validated, queried and serialized. A
+generator is a stream: it builds one object per step, with its value objects and the entries the pattern gives it,
+and links what it builds to the store's data as the pattern says (e.g. listed in a singleton directory), or leaves it
+transient.
 
 ## Characterizers
 
-Planned for 0.3. A characterizer reads a stream of objects of one schema and fits a pattern to them: the proportion
+Planned for 0.4. A characterizer reads a stream of objects of one schema and fits a pattern to them: the proportion
 satisfying each predicate of a set, and, per part, each property's distribution and each adjacency's number of
 entries, from a family the caller chooses (or the best of several by a criterion, such as the log-likelihood).
 
@@ -177,9 +220,10 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - Predicates over value objects: a match binds reference objects, from extents; a rule about a value object is
   written today as a rule about its owner.
 - Checking statically that a pattern's distributions satisfy its predicates (a solver), rather than by rejection.
+- Planning inside quantifiers, and partial evaluation of rules over the algebra (Basic's reducer does not take its
+  terms).
 - More shapes for the planner: hops in the other direction (from `b` to `a` through `b`'s own adjacency), equality on
   keys, and ordering scans by extent size.
-- Which pseudorandom generator, and how streams are split.
 
 ## Resolved
 
@@ -195,6 +239,12 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - A query streams lazily over the store's data first; standing queries come later.
 - A pattern is layered: weights over predicates, and distributions within each part.
 - Generated data is byte-identical across implementations from a seed.
+- A store is equipped with a random source when it is made (`Stores.Random`, in mbse-schemas); PCG32 is the reference
+  source, and streams split by key from the seed, not from what was drawn.
+- Mandatory, possible and forbidden links are predicates: quantifiers over extents (`forall`, `exists`, `count`) and
+  `linked` are terms of a `Predicates` dialect extending Basic, and "possible" is a weighted disjunction (`choice`) of
+  the alternatives, which validation reads as their disjunction and generators as their weights.
+- A pattern is a predicate with weighted choices, plus distributions; it refers to predicates by name or inline.
 - A predicate links its rule through `Expressions.Arguments`, whose argument end Basic's kinds already declare
   (`used_by`), so mbse-schemas' validation accepts the link; a relation of this package's would need Basic's kinds to
   declare it.

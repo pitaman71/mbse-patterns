@@ -9,10 +9,10 @@ same order of statements.
 from __future__ import annotations
 
 from mbse.Expressions import Expressions as E
-from mbse.Patterns import Constraints as C
+from mbse.Patterns import Constraints as C, Predicates as P
 from mbse.Schemas.Framework import Proxies, Schemas as S
 
-CASES = ["predicates", "empty"]
+CASES = ["predicates", "empty", "algebra"]
 
 
 def build():
@@ -43,7 +43,17 @@ def build():
     # --- empty: a set of no predicates ---
     empty = C.OfSet.Builder().create()
 
+    # --- algebra: mandatory, forbidden and possible links, a count, and an extent, over the store ---
+    owns = P.exists("p", Phone, P.linked(c, "phones", p, "phone"))
+    algebra = C.OfSet.Builder().predicates(
+        lambda b: b.name("Mandatory").rule(P.forall("c", Contact, owns)),
+        lambda b: b.name("Forbidden").rule(P.forall("c", Contact, owns.not_())),
+        lambda b: b.name("Possible").rule(P.forall("c", Contact, P.choice((0.35, owns), (0.65, owns.not_())))),
+        lambda b: b.name("Few").rule(P.count("c", Contact, c.has("age")).le(E.operation("count", P.extent(Phone)))),
+    ).create()
+
     return {
         "predicates": (C.OfSet.Schema, predicates, store),
         "empty": (C.OfSet.Schema, empty, store),
+        "algebra": (C.OfSet.Schema, algebra, store),
     }

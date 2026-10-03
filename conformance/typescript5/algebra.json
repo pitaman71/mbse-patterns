@@ -1,0 +1,366 @@
+{
+  "root": "s0",
+  "objects": {
+    "s0": {
+      "predicates": [
+        {
+          "predicate": {
+            "$ref": "s1",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        },
+        {
+          "predicate": {
+            "$ref": "s2",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 1
+        },
+        {
+          "predicate": {
+            "$ref": "s3",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 2
+        },
+        {
+          "predicate": {
+            "$ref": "s4",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 3
+        }
+      ]
+    },
+    "s1": {
+      "name": "Mandatory",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s5",
+            "$schema": "Patterns.OfForall"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s2": {
+      "name": "Forbidden",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s6",
+            "$schema": "Patterns.OfForall"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s3": {
+      "name": "Possible",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s7",
+            "$schema": "Patterns.OfForall"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s4": {
+      "name": "Few",
+      "rule": [
+        {
+          "argument": {
+            "$ref": "s8",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s5": {
+      "kind": "forall",
+      "name": "c",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s9",
+            "$schema": "Patterns.OfExtent"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s10",
+            "$schema": "Patterns.OfExists"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s6": {
+      "kind": "forall",
+      "name": "c",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s11",
+            "$schema": "Patterns.OfExtent"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s12",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s7": {
+      "kind": "forall",
+      "name": "c",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s13",
+            "$schema": "Patterns.OfExtent"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s14",
+            "$schema": "Patterns.OfChoice"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s8": {
+      "kind": "operation",
+      "name": "le",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s15",
+            "$schema": "Patterns.OfCount"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s16",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s9": {
+      "kind": "extent",
+      "schema": "Contact"
+    },
+    "s10": {
+      "kind": "exists",
+      "name": "p",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s17",
+            "$schema": "Patterns.OfExtent"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s18",
+            "$schema": "Patterns.OfLinked"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s11": {
+      "kind": "extent",
+      "schema": "Contact"
+    },
+    "s12": {
+      "kind": "operation",
+      "name": "not",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s10",
+            "$schema": "Patterns.OfExists"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s13": {
+      "kind": "extent",
+      "schema": "Contact"
+    },
+    "s14": {
+      "kind": "choice",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s19",
+            "$schema": "Patterns.OfOption"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s20",
+            "$schema": "Patterns.OfOption"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s15": {
+      "kind": "count",
+      "name": "c",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s21",
+            "$schema": "Patterns.OfExtent"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s22",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s16": {
+      "kind": "operation",
+      "name": "count",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s23",
+            "$schema": "Patterns.OfExtent"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s17": {
+      "kind": "extent",
+      "schema": "Phone"
+    },
+    "s18": {
+      "kind": "linked",
+      "adjacency": "phones",
+      "link": "phone",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s24",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s25",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s19": {
+      "kind": "option",
+      "weight": 0.35,
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s10",
+            "$schema": "Patterns.OfExists"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s20": {
+      "kind": "option",
+      "weight": 0.65,
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s26",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s21": {
+      "kind": "extent",
+      "schema": "Contact"
+    },
+    "s22": {
+      "kind": "operation",
+      "name": "has",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s24",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s27",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s23": {
+      "kind": "extent",
+      "schema": "Phone"
+    },
+    "s24": {
+      "kind": "variable",
+      "name": "c"
+    },
+    "s25": {
+      "kind": "variable",
+      "name": "p"
+    },
+    "s26": {
+      "kind": "operation",
+      "name": "not",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s10",
+            "$schema": "Patterns.OfExists"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s27": {
+      "kind": "literal",
+      "str": "age"
+    }
+  }
+}

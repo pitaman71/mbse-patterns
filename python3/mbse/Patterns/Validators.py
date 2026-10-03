@@ -11,6 +11,9 @@ problems, the match labelled as mbse-schemas' `Validators` labels objects (the s
   `'report'` (the default) reports it so, `'ignore'` does not, and `'violation'` reports it as not holding;
 - `the=Contact#0: 'IsAnAdult' raised TypeError: ...`, when evaluating it raises.
 
+A predicate without symbols is a statement about the whole store, with one match, labelled `the store`. Rules are
+evaluated over the store (`Predicates.Evaluator`), whose extents are read once per check.
+
 Structure is mbse-schemas' `Validators.Validate(store)`'s to check: run both. The predicates are checked statically
 (`Constraints.check`) when the validator is made, so that a rule that cannot be right is reported once, not per match.
 """
@@ -20,23 +23,13 @@ from __future__ import annotations
 import itertools
 from typing import Any
 
-from mbse.Expressions import Evaluators
 from mbse.Schemas.Framework import Reachable, Schemas, Stores, Visitors
 
-from . import Constraints
+from . import Constraints, Predicates
 
-__all__ = ["Validate", "UNKNOWN", "holds"]
+__all__ = ["Validate", "UNKNOWN"]
 
 UNKNOWN = ("report", "ignore", "violation")
-
-
-def holds(rule: Any, scope: dict[str, Any]) -> bool | None:
-    """The rule's value with `scope` bound: `True`, `False` or unknown (`None`); a rule that gives anything else
-    raises."""
-    result = Evaluators.OfAny(rule, scope)
-    if result is not None and type(result) is not bool:
-        raise TypeError(f"a predicate must be a bool, got {type(result).__name__}")
-    return result
 
 
 class Validate:
@@ -63,18 +56,19 @@ class Validate:
         for i, value in enumerate(values):
             pools.setdefault(value.schema_name(), []).append((f"{value.schema_name()}#{i}", value))
         problems: list[str] = []
+        evaluate = Predicates.Evaluator(self._store)
         for predicate in self._predicates.predicates:
             symbols = list(predicate.symbols)
             for match in itertools.product(*(pools.get(s.name, []) for s in predicate.symbols.values())):
-                problem = self._problem(predicate.rule, dict(zip(symbols, (value for _, value in match))))
+                problem = self._problem(evaluate, predicate.rule, dict(zip(symbols, (value for _, value in match))))
                 if problem is not None:
-                    label = ", ".join(f"{symbol}={label}" for symbol, (label, _) in zip(symbols, match))
+                    label = ", ".join(f"{symbol}={label}" for symbol, (label, _) in zip(symbols, match)) or "the store"
                     problems.append(f"{label}: {predicate.name!r} {problem}")
         return problems
 
-    def _problem(self, rule: Any, scope: dict[str, Any]) -> str | None:
+    def _problem(self, evaluate: Predicates.Evaluator, rule: Any, scope: dict[str, Any]) -> str | None:
         try:
-            result = holds(rule, scope)
+            result = Predicates.holds(evaluate, rule, scope)
         except Exception as error:  # a rule that raises is a problem of the data or the rule, reported in place
             return f"raised {type(error).__name__}: {error}"
         if result is None:

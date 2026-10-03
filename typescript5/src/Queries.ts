@@ -4,7 +4,8 @@
  * `QueryableStore` is the protocol: an mbse-schemas store (`Stores.Store`) that also answers
  * `select(predicate, variables = null, unknown = false)`, an iterator over the predicate's matches among the store's
  * data for which its rule holds. A match maps each symbol to an object of the symbol's schema, from the schema's extent
- * (what the store's singletons reach: objects the program built but never linked to the store's data are not found).
+ * (what the store's singletons reach: objects the program built but never linked to the store's data are not found); a
+ * predicate without symbols has one match, empty, when it holds.
  * `variables` binds the rule's other names; `unknown` also yields the matches for which the rule is unknown. The
  * predicate is checked when `select` is called, which throws for one that cannot be a query; the extents are read only
  * as matches are asked for.
@@ -13,12 +14,11 @@
  * implementation's to choose from the rule's shape. `Scan(store)` makes any store queryable, in memory, delegating
  * every `Stores.Store` method to it, and plans each query:
  *
- * - What the variables alone determine is evaluated once, first (`Partials`).
  * - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match that fails
- *   one is never extended.
- * - A conjunct `any(e in entries(a, 'adjacency'), e.link == b)` relates two symbols through a relation: `b`'s
- *   candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the relation's `unique`
- *   clauses makes `a`'s end determine the entry, there is at most one, and the hop is taken first.
+ *   one is never extended; those that read no symbol, only variables, are tested once, first.
+ * - A conjunct `linked(a, 'adjacency', b)`, or `any(e in entries(a, 'adjacency'), e.link == b)`, relates two symbols
+ *   through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
+ *   relation's `unique` clauses makes `a`'s end determine the entry, there is at most one, and the hop is taken first.
  * - A symbol no hop reaches is scanned. Symbols that a hop from another could reach are scanned last, so that the hop
  *   is taken instead; otherwise symbols are scanned in their declared order.
  *
@@ -26,14 +26,14 @@
  * database) implements `select` itself. `select(store, ...)` asks a queryable store, and scans any other.
  */
 
-import { Expressions as E, Partials } from "@mbse/expressions";
+import { Expressions as E } from "@mbse/expressions";
 import { Symbolics } from "@mbse/expressions/Framework";
 import { Errors, Schemas, Stores, Validators as SchemaValidators } from "@mbse/schemas/Framework";
 import { repr } from "@mbse/schemas/Framework/Repr";
 import type { Visitable } from "@mbse/schemas/Framework/Visitors";
 
 import type * as Constraints from "./Constraints.js";
-import { holds } from "./Validators.js";
+import * as Predicates from "./Predicates.js";
 
 /** Values for a rule's names other than the symbols. */
 export type Variables = Record<string, unknown>;
@@ -72,8 +72,29 @@ interface Hop {
   functional: boolean;
 }
 
-/** The hop a conjunct `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a` to `b`, if it is one. */
+/** The link and whether the hop is functional, for a hop from `source` through `adjacency`, if there is one. */
+function declaredHop(schemas: ReadonlyMap<string, Schemas.OfObject.Data>, source: string, adjacency: string | null,
+  link: string | null): [string, boolean] | null {
+  const declared = (schemas.get(source) as Schemas.OfObject.Data).adjacencies.get(adjacency ?? "");
+  if (declared === undefined || declared.relation === null) return null;
+  const relation = declared.relation;
+  const others = relation.links.filter((other) => other !== declared.me);
+  const chosen = link ?? (others.length === 1 ? (others[0] as string) : null);
+  if (chosen === null || !others.includes(chosen)) return null;
+  const fields = [...relation.links, ...relation.properties.keys()];
+  return [chosen, relation.uniques.some((unique) => fields.every((field) => unique.has(field) || field === declared.me))];
+}
+
+/** The hop a conjunct `linked(a, 'adjacency', b)` or `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a`
+ * to `b`, if it is one. */
 function hopOf(conjunct: unknown, schemas: ReadonlyMap<string, Schemas.OfObject.Data>): Hop | null {
+  if (conjunct instanceof Predicates.OfLinked) {
+    const [source, target] = [variable(conjunct.source, schemas), variable(conjunct.target, schemas)];
+    const found = source === null || target === null || source === target ? null
+      : declaredHop(schemas, source, conjunct.adjacency as string, conjunct.link as string | null);
+    return found === null ? null
+      : { source: source as string, adjacency: conjunct.adjacency as string, link: found[0], target: target as string, functional: found[1] };
+  }
   if (!(conjunct instanceof E.OfQuantifier.Data && conjunct.quantifier === "any")) return null;
   const [collection, body, item] = [conjunct.collection, conjunct.body, conjunct.name as string];
   if (!(collection instanceof E.OfOperation.Data && collection.name === "entries" && collection.arguments.length === 2
@@ -84,14 +105,9 @@ function hopOf(conjunct: unknown, schemas: ReadonlyMap<string, Schemas.OfObject.
     if (get instanceof E.OfOperation.Data && get.name === "get" && get.arguments.length === 2
       && variable(get.arguments[0], new Set([item])) !== null && source !== null && target !== null
       && target !== source && target !== item) {
-      const declared = (schemas.get(source) as Schemas.OfObject.Data).adjacencies.get(adjacency ?? "");
       const link = textOf(get.arguments[1]);
-      if (declared === undefined || declared.relation === null || link === null || !declared.relation.links.includes(link)
-        || link === declared.me) return null;
-      const relation = declared.relation;
-      const fields = [...relation.links, ...relation.properties.keys()];
-      const functional = relation.uniques.some((unique) => fields.every((field) => unique.has(field) || field === declared.me));
-      return { source, adjacency: adjacency as string, link, target, functional };
+      const found = link === null ? null : declaredHop(schemas, source, adjacency, link);
+      return found === null ? null : { source, adjacency: adjacency as string, link: found[0], target, functional: found[1] };
     }
   }
   return null;
@@ -109,7 +125,6 @@ class Plan {
 
   constructor(readonly store: Stores.Store, predicate: Constraints.OfPredicate.Data, variables: Variables) {
     const symbols = new Map(predicate.symbols) as Map<string, Schemas.OfObject.Data>;
-    if (symbols.size === 0) throw new Errors.ValueError("a query needs a predicate with at least one symbol");
     for (const [symbol, schema] of symbols) {
       if (!(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null)) {
         throw new Errors.ValueError(`symbol ${repr(symbol)} needs a named reference object schema`);
@@ -119,12 +134,12 @@ class Plan {
     for (const name of Object.keys(variables)) {
       if (symbols.has(name)) throw new Errors.ValueError(`${repr(name)} is a symbol; it is not a variable`);
     }
-    const rule = E.OfAny.resolve(predicate.rule);
-    const problems = rule.validate({ bound: [...symbols.keys(), ...Object.keys(variables)], core: true });
+    const rule = Predicates.DIALECT.resolve(predicate.rule);
+    const problems = Predicates.DIALECT.validate(rule, { bound: [...symbols.keys(), ...Object.keys(variables)], core: true });
     if (problems.length > 0) throw new Errors.ValueError(`the predicate cannot be a query: ${problems.join("; ")}`);
     this.symbols = symbols;
     this.variables = { ...variables };
-    this.rule = Partials.OfAny(rule, variables);
+    this.rule = rule;
     const parts = conjuncts(this.rule).map((c) => [c, [...Symbolics.free(c)].filter((name) => symbols.has(name))] as const);
     const hops = parts.map(([c]) => hopOf(c, symbols)).filter((hop): hop is Hop => hop !== null);
     const names = [...symbols.keys()];
@@ -161,18 +176,15 @@ class Plan {
   }
 
   *matches(unknown: boolean): Generator<Match> {
-    const extents = new Map<string, readonly Visitable[]>();
+    const evaluate = new Predicates.Evaluator(this.store); // reads each extent once, when first asked for
     const scope: Record<string, unknown> = { ...this.variables };
-    if (this.first.some((test) => holds(test, scope) === false)) return;
-    yield* this.extend(0, scope, extents, unknown);
+    if (this.first.some((test) => Predicates.holds(evaluate, test, scope) === false)) return;
+    yield* this.extend(0, scope, evaluate, unknown);
   }
 
-  private candidates(symbol: string, hop: Hop | null, scope: Record<string, unknown>, extents: Map<string, readonly Visitable[]>): Visitable[] {
+  private candidates(symbol: string, hop: Hop | null, scope: Record<string, unknown>, evaluate: Predicates.Evaluator): Visitable[] {
     const name = (this.symbols.get(symbol) as Schemas.OfObject.Data).name as string;
-    if (hop === null) {
-      if (!extents.has(name)) extents.set(name, [...this.store.extent(name)]);
-      return [...(extents.get(name) as readonly Visitable[])];
-    }
+    if (hop === null) return [...evaluate.extent(name)];
     const found = new Map<unknown, Visitable>();
     for (const entry of SchemaValidators.entries_of(scope[hop.source] as Visitable).get(hop.adjacency) ?? []) {
       const target = entry.targets.get(hop.link);
@@ -181,20 +193,20 @@ class Plan {
     return [...found.values()];
   }
 
-  private *extend(depth: number, scope: Record<string, unknown>, extents: Map<string, readonly Visitable[]>,
+  private *extend(depth: number, scope: Record<string, unknown>, evaluate: Predicates.Evaluator,
     unknown: boolean): Generator<Match> {
     if (depth === this.order.length) {
-      const result = holds(this.rule, scope);
+      const result = Predicates.holds(evaluate, this.rule, scope);
       if (result === true || (unknown && result === null)) {
         yield Object.fromEntries([...this.symbols.keys()].map((symbol) => [symbol, scope[symbol] as Visitable]));
       }
       return;
     }
     const [symbol, hop] = this.order[depth] as [string, Hop | null];
-    for (const candidate of this.candidates(symbol, hop, scope, extents)) {
+    for (const candidate of this.candidates(symbol, hop, scope, evaluate)) {
       const inner = { ...scope, [symbol]: candidate };
-      if ((this.tests[depth] as unknown[]).every((test) => holds(test, inner) !== false)) {
-        yield* this.extend(depth + 1, inner, extents, unknown);
+      if ((this.tests[depth] as unknown[]).every((test) => Predicates.holds(evaluate, test, inner) !== false)) {
+        yield* this.extend(depth + 1, inner, evaluate, unknown);
       }
     }
   }
@@ -234,6 +246,10 @@ export class Scan implements QueryableStore {
 
   extent(name: string): readonly Visitable[] {
     return this.store.extent(name);
+  }
+
+  random(): Stores.Random {
+    return this.store.random();
   }
 
   select(predicate: Constraints.OfPredicate.Data, variables: Variables | null = null, unknown = false): Generator<Match> {

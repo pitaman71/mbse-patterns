@@ -75,5 +75,7 @@ check([...query.select(IsAnAdult, null, true)].length === 2, "with unknown");
 - Rules are written with writers: TypeScript has no `FromFunction`, since a JavaScript function has no Python source.
 - `.symbols(...)` takes a record or a `Map`, and a predicate's `symbols` is a `Map`; a match is a record.
 - A validator's options are an object: `Validate(store, rules, { unknown: "ignore" })`.
+- The algebra's choices take arrays, `P.choice([0.35, owns], [0.65, owns.not_()])`, and its evaluator is
+  `new Predicates.Evaluator(store).run(rule, variables)`.
 - `select(predicate, variables, unknown)` takes `unknown` by position (`null` for no variables), and returns a
   generator: `next()` gives `{ value, done }`.

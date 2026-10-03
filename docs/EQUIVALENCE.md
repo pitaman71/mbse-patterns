@@ -18,3 +18,5 @@ language. Any other difference is a bug.
 | Identities | `id(self)` | a string unique to the object (`"predicate 3"`) | mbse-schemas keys identities by `String(identity())` | CON-01, CON-04 |
 | Integers | `int` | `bigint` (`18n`); a `number` is a float | as in mbse-schemas | throughout |
 | YAML | `description: 18 or older` | `description: '18 or older'` | mbse-schemas' YAML writers quote differently; both read back the same, and JSON is byte-identical | CONF-02, CONF-03 |
+| The predicate algebra's evaluator | `Predicates.Evaluator(store)(rule, variables)`, a callable | `new Predicates.Evaluator(store).run(rule, variables)` | no callable instances | ALG-02 |
+| A choice's options | `choice((0.35, p), (0.65, q))`, tuples | `choice([0.35, p], [0.65, q])`, arrays | the language's own pairs | ALG-01 |

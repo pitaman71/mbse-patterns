@@ -82,6 +82,9 @@ Validators.Validate(store, predicates, unknown="report")(schema, value)   # or .
 Queries.Scan(store).select(predicate, variables=None, unknown=False)       # matches: {symbol: object}
 Queries.Scan(store).explain(predicate, variables=None)                     # the plan, one line per symbol
 Queries.select(store, predicate, ...)                       # a queryable store's own select, or a scan
+P.forall("c", Contact, P.exists("p", Phone, P.linked(c, "phones", p)))   # the algebra: mandatory links
+P.choice((0.35, owns), (0.65, owns.not_())); P.count("c", Contact, body); P.extent(Contact)
+Predicates.Evaluator(store)(rule, variables)                # evaluates the algebra over a store
 ```
 
 ## Traps

@@ -12,26 +12,22 @@
  *   decides: `'report'` (the default) reports it so, `'ignore'` does not, and `'violation'` reports it as not holding;
  * - `the=Contact#0: 'IsAnAdult' raised TypeError: ...`, when evaluating it raises.
  *
+ * A predicate without symbols is a statement about the whole store, with one match, labelled `the store`. Rules are
+ * evaluated over the store (`Predicates.Evaluator`), whose extents are read once per check.
+ *
  * Structure is mbse-schemas' `Validators.Validate(store)`'s to check: run both. The predicates are checked statically
  * (`Constraints.check`) when the validator is made, so that a rule that cannot be right is reported once, not per
  * match.
  */
 
-import { Evaluators } from "@mbse/expressions";
 import { Errors, Reachable, Schemas, Stores } from "@mbse/schemas/Framework";
-import { repr, typeName } from "@mbse/schemas/Framework/Repr";
+import { repr } from "@mbse/schemas/Framework/Repr";
 import type { Visitable } from "@mbse/schemas/Framework/Visitors";
 
 import * as Constraints from "./Constraints.js";
+import * as Predicates from "./Predicates.js";
 
 export const UNKNOWN = ["report", "ignore", "violation"] as const;
-
-/** The rule's value with `scope` bound: `true`, `false` or unknown (`null`); a rule that gives anything else throws. */
-export function holds(rule: unknown, scope: Record<string, unknown>): boolean | null {
-  const result = Evaluators.OfAny(rule as never, scope);
-  if (result !== null && typeof result !== "boolean") throw new TypeError(`a predicate must be a bool, got ${typeName(result)}`);
-  return result as boolean | null;
-}
 
 /** Validates data against predicates: `Validate(store, predicates, { unknown: "report" })(schema, value)`. */
 export interface Validator {
@@ -53,10 +49,10 @@ export function Validate(store: Stores.Store, predicates: Iterable<Constraints.O
   }
   const checked = Constraints.check(predicates);
 
-  const problem = (rule: unknown, scope: Record<string, unknown>): string | null => {
+  const problem = (evaluate: Predicates.Evaluator, rule: unknown, scope: Record<string, unknown>): string | null => {
     let result: boolean | null;
     try {
-      result = holds(rule, scope);
+      result = Predicates.holds(evaluate, rule, scope);
     } catch (error) { // a rule that raises is a problem of the data or the rule, reported in place
       return `raised ${(error as Error).name}: ${(error as Error).message}`;
     }
@@ -75,12 +71,13 @@ export function Validate(store: Stores.Store, predicates: Iterable<Constraints.O
       pools.set(value.schema_name(), pool);
     });
     const problems: string[] = [];
+    const evaluate = new Predicates.Evaluator(store);
     for (const predicate of checked.predicates) {
       const symbols = [...predicate.symbols.keys()];
       for (const match of product([...predicate.symbols.values()].map((s) => pools.get(s.name as string) ?? []))) {
-        const found = problem(predicate.rule, Object.fromEntries(symbols.map((symbol, i) => [symbol, (match[i] as [string, Visitable])[1]])));
+        const found = problem(evaluate, predicate.rule, Object.fromEntries(symbols.map((symbol, i) => [symbol, (match[i] as [string, Visitable])[1]])));
         if (found !== null) {
-          const label = symbols.map((symbol, i) => `${symbol}=${(match[i] as [string, Visitable])[0]}`).join(", ");
+          const label = symbols.map((symbol, i) => `${symbol}=${(match[i] as [string, Visitable])[0]}`).join(", ") || "the store";
           problems.push(`${label}: ${repr(predicate.name)} ${found}`);
         }
       }

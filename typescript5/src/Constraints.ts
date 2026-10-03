@@ -12,10 +12,11 @@
  *       .rule(E.variable("the").age.ge(18n))
  *       .create();
  *
- * `.rule(spec)` takes any Basic `Spec`: data or a writer. A set, `OfSet`, gathers predicates in order:
+ * `.rule(spec)` takes any spec of the predicate algebra (`Predicates`, which extends Basic): data or a writer. A predicate
+ * without symbols is a statement about the whole store, e.g. that every contact has a phone. A set, `OfSet`, gathers predicates in order:
  * `new OfSet.Builder().predicates(IsAnAdult, (p) => p.name(...)...)`. Nothing validates until asked: `validate()`
- * reports a missing name or rule, no symbols, a symbol whose schema is not a named reference object schema, the rule's
- * problems as a core Basic rule whose free names are the symbols, and, in a set, two predicates with one name.
+ * reports a missing name or rule, a symbol whose schema is not a named reference object schema, the rule's problems as a
+ * rule of the algebra whose free names are the symbols, and, in a set, two predicates with one name.
  *
  * Predicates and sets are mbse-schemas reference objects with meta-schemas (`Patterns.Predicate`, `Patterns.Set`), so
  * a set is stored and sent like any data. A symbol's schema is written as a property's type is: by its name, or
@@ -26,12 +27,13 @@
  * are inline. `register(store)` registers the meta-schemas, and Basic's, in another store.
  */
 
-import { Expressions } from "@mbse/expressions";
 import { Terms } from "@mbse/expressions/Framework";
 import { Bindings, Errors, Modules, Schemas, Stores } from "@mbse/schemas/Framework";
 import type { PlainMap } from "@mbse/schemas/Framework/Plain";
 import { repr } from "@mbse/schemas/Framework/Repr";
 import type { OfObject } from "@mbse/schemas/Framework/Visitors";
+
+import * as Predicates from "./Predicates.js";
 
 export const PREDICATE = "Patterns.Predicate";
 export const SET = "Patterns.Set";
@@ -46,7 +48,7 @@ export const Members = new Schemas.OfRelation.Builder().name(MEMBERS).links("set
 /** Identities are strings, unique per object, as mbse-schemas keys them. */
 let made = 0;
 
-type Rule = Expressions.OfAny.Data;
+type Rule = Terms.Term;
 type Symbols = Map<string, Schemas.OfAny.Data>;
 
 /** Shared builder mechanics, as mbse-schemas' builders have them. */
@@ -104,13 +106,12 @@ class PredicateData {
     const label = `predicate ${repr(this.name)}`;
     const problems = ([["name", this.name], ["rule", this.rule]] as const).filter(([, value]) => value === null)
       .map(([what]) => `${label}: a predicate needs a ${what}`);
-    if (this.symbols.size === 0) problems.push(`${label}: a predicate needs at least one symbol`);
     for (const [symbol, schema] of this.symbols) {
       if (!(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null)) {
         problems.push(`${label}: symbol ${repr(symbol)} needs a named reference object schema`);
       }
     }
-    const rule = this.rule === null ? [] : this.rule.validate({ bound: [...this.symbols.keys()], core: true });
+    const rule = this.rule === null ? [] : Predicates.DIALECT.validate(this.rule, { bound: [...this.symbols.keys()], core: true });
     return [...problems, ...rule.map((problem) => `${label}: ${problem}`)];
   }
 
@@ -153,9 +154,9 @@ class PredicateBuilder extends Builder<PredicateData> {
     return this;
   }
 
-  /** The rule, a Basic `Spec` whose free names are the symbols. */
+  /** The rule, a spec of the predicate algebra whose free names are the symbols. */
   rule(spec: unknown): this {
-    this.fields["rule"] = Expressions.OfAny.resolve(spec);
+    this.fields["rule"] = Predicates.DIALECT.resolve(spec);
     return this;
   }
 }
@@ -249,11 +250,11 @@ export namespace OfSet {
 function linked(entry: Bindings.Entry, link: string, isKind: (value: unknown) => boolean, what: string): any {
   const target = entry.links.get(link);
   if (target === null || target === undefined) throw new Errors.ValueError(`link ${repr(link)} is not set`);
-  if (!isKind(target)) throw new TypeError(`${what} must be ${what === "a rule" ? "a Basic expression" : "a predicate"}`);
+  if (!isKind(target)) throw new TypeError(`${what} must be ${what === "a rule" ? "an expression" : "a predicate"}`);
   return target;
 }
 
-const isRule = (value: unknown) => Expressions.DIALECT.classes.some((kind) => value instanceof kind);
+const isRule = (value: unknown) => Predicates.DIALECT.accepts(value);
 
 function readPredicate(predicate: PredicateData): Bindings.State {
   const values = new Map<string, unknown>();
@@ -295,9 +296,9 @@ function assign<T extends object>(make: (state: Bindings.State) => T): (instance
 
 const SET_BINDING = new Bindings.Binding(OfSet.Schema, readSet, makeSet, assign(makeSet));
 
-/** Basic's kinds, as `Bindings.OfStore` takes them. */
+/** The predicate algebra's kinds, Basic's included, as `Bindings.OfStore` takes them. */
 function basic(): (readonly [Schemas.OfObject.Data, (instance?: any) => unknown])[] {
-  const dialect = Expressions.DIALECT;
+  const dialect = Predicates.DIALECT;
   return dialect.classes.map((kind) => {
     const builder = dialect.builders.get(kind.KIND) as new (instance?: unknown) => unknown;
     return [kind.Schema, (instance?: unknown) => new builder(instance)] as const;
@@ -323,10 +324,10 @@ export class OfStore extends Bindings.OfStore {
  * symbols' schemas are inline. */
 export const Builders = new OfStore(new Stores.Catalog() as unknown as Stores.Store); // it only looks names up
 
-/** Registers the meta-schemas of predicates and sets, and Basic's, in `store` (e.g. a `Proxies.OfStore`), skipping
- * those it already holds. Returns the store. */
+/** Registers the meta-schemas of predicates and sets, and the algebra's (Basic's included), in `store` (e.g. a
+ * `Proxies.OfStore`), skipping those it already holds. Returns the store. */
 export function register<S extends Stores.Store & { register(schema: never): void }>(store: S): S {
-  Expressions.DIALECT.register(store);
+  Predicates.DIALECT.register(store);
   for (const schema of [OfPredicate.Schema, OfSet.Schema, Members]) {
     if (!store.names().includes(schema.name as string)) store.register(schema as never);
   }

@@ -12,8 +12,9 @@ import { Proxies, Schemas as S, type Stores } from "@mbse/schemas/Framework";
 import type { Visitable } from "@mbse/schemas/Framework/Visitors";
 
 import * as C from "../Constraints.js";
+import * as P from "../Predicates.js";
 
-export const CASES = ["predicates", "empty"];
+export const CASES = ["predicates", "empty", "algebra"];
 
 export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Stores.Store]> {
   const text = (name: string) => (p: any) => p.name(name).of((t: any) => t.as_native(String));
@@ -42,8 +43,18 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
   // --- empty: a set of no predicates ---
   const empty = new C.OfSet.Builder().create();
 
+  // --- algebra: mandatory, forbidden and possible links, a count, and an extent, over the store ---
+  const owns = P.exists("p", Phone, P.linked(c, "phones", p, "phone"));
+  const algebra = new C.OfSet.Builder().predicates(
+    (b) => b.name("Mandatory").rule(P.forall("c", Contact, owns)),
+    (b) => b.name("Forbidden").rule(P.forall("c", Contact, owns.not_())),
+    (b) => b.name("Possible").rule(P.forall("c", Contact, P.choice([0.35, owns], [0.65, owns.not_()]))),
+    (b) => b.name("Few").rule(P.count("c", Contact, c.has("age")).le(E.operation("count", P.extent(Phone)))),
+  ).create();
+
   return new Map([
     ["predicates", [C.OfSet.Schema, predicates, store] as const],
     ["empty", [C.OfSet.Schema, empty, store] as const],
+    ["algebra", [C.OfSet.Schema, algebra, store] as const],
   ]);
 }
