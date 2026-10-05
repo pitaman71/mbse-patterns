@@ -1,6 +1,6 @@
 {
   "name": "@mbse/patterns",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Constraints, queries and patterns over mbse-schemas data: rules as constraints, validated and queried, and (later) populations to generate and characterize (TypeScript implementation)",
   "keywords": [
     "constraints",
