@@ -93,6 +93,8 @@ npm run coverage
 
 ## Documentation
 
+- Tutorials, seven case studies that build from a rule to generated test data: [Python](python3/tutorials/README.md)
+  and [TypeScript](typescript5/tutorials/README.md)
 - [docs/PATTERNS.md](docs/PATTERNS.md): the design, the planned releases and the open questions
 - [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md): a skill for AI agents using the package
 - [AGENTS.md](AGENTS.md): for agents changing it; [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md): the two implementations

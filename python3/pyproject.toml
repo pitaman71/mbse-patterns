@@ -36,7 +36,7 @@ mbse-schemas = { path = "../../mbse-schemas/python3", editable = true }  # the s
 mbse-expressions = { path = "../../mbse-expressions/python3", editable = true }
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "tutorials"]
 addopts = "--nbmake"
 
 [tool.coverage.run]

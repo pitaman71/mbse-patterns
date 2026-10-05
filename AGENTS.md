@@ -13,6 +13,7 @@ and `typescript5/`.
 | You want to | Read |
 |---|---|
 | Use the library: write predicates, validate data, query a store | [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md), a skill. It loads its references only as needed |
+| Learn it by example, from a rule to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), seven case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
 | Understand a design rule, a planned release or an open question | [docs/PATTERNS.md](docs/PATTERNS.md), by section |
 | Change the package | this file, then [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md) |
 | Find or add a test case | [python3/tests/TestPlan.md](python3/tests/TestPlan.md) (TypeScript's plan lists only its differences) |
@@ -28,6 +29,9 @@ and `typescript5/`.
 - **The two implementations are equivalent.** Change both in the same commit, with the same names, the same error
   classes and byte-identical messages. JSON output must be byte-identical: regenerate the corpora and let CONF-02
   compare them (YAML need only read back the same; mbse-schemas' two YAML writers quote some strings differently). A difference not listed in `docs/EQUIVALENCE.md` is a bug.
+- **Tutorials are tested too.** `pytest` and `npm run coverage` run `tutorials/` beside `tests/`; the two languages
+  tell the same case studies with the same outputs. Re-execute a tutorial after a change that alters its output, and
+  commit it with its outputs.
 - **Tests are Jupyter notebooks**, one suite per notebook, with the same case IDs in the same order in both
   languages. Each case is a markdown cell `## ID · title` followed by one code cell. Notebooks are JSON written with
   `indent=1`, `sort_keys=True` and `ensure_ascii=False`.

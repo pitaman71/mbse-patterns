@@ -86,6 +86,7 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
 | Write Python: a complete program, API cheat sheet, traps | [references/python.md](references/python.md) |
 | Write TypeScript: the same program, the differences from Python | [references/typescript.md](references/typescript.md) |
 
-Deeper material is in the repository: `docs/PATTERNS.md` holds the design, the planned patterns, generators and
+Deeper material is in the repository: `python3/tutorials/` and `typescript5/tutorials/` teach it in seven case
+studies, with outputs, and `docs/PATTERNS.md` holds the design, the planned patterns, generators and
 characterizers, and the open questions. Links use `https://github.com/pitaman71/mbse-patterns/blob/main/<path>`; in a
 checkout, `<path>` is relative to the repository root.

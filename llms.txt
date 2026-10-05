@@ -9,6 +9,10 @@ A pattern is a predicate whose rule weighs alternatives (choices of weighted arm
 - [Agent skill](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/SKILL.md): when to use it, the rules that prevent most mistakes, and references loaded per task
 - [Python](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/references/python.md) and [TypeScript](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/references/typescript.md): a complete program, cheat sheet and traps
 
+## Learning it
+
+- [Python tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/python3/tutorials/README.md) and [TypeScript tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/tutorials/README.md): seven case studies, from a rule your data must keep to reproducible generated test data
+
 ## Design
 
 - [PATTERNS.md](https://github.com/pitaman71/mbse-patterns/blob/main/docs/PATTERNS.md): predicates, validators and queries, the planned patterns, generators and characterizers, and the open questions
