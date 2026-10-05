@@ -1,26 +1,34 @@
 """Predicates: named rules over a store's objects, and the predicate algebra they are written in.
 
-A predicate is a named rule over symbols, each bound to an object of a schema; it applies to a *match*, a binding of
-every symbol to an object of its schema. It is built as schemas are, by a fluent builder finalized by `create()`,
-`clone()` or `update()`, none of which validates:
+A predicate is a rule over symbols, each bound to an object of a schema, and parameters, each a value; it applies to a
+*match*, a binding of every symbol to an object of its schema. It is built as schemas are, by a fluent builder finalized
+by `create()`, `clone()` or `update()`, none of which validates:
 
-    c, p = E.variable("c"), E.variable("p")
-    HasAPhone = (
-        Predicates.Builder()
-        .name("HasAPhone")
-        .symbols({"c": Contact})
-        .requires(Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(
-            Predicates.Contains(c.phones, lambda e: e.phone == p))))
+    APerson = {"person": Person}
+    HasName = (
+        Predicates.OfPredicate.Builder()
+        .name("HasName")
+        .symbols(APerson)
+        .parameters(lambda p: p.name("name"))
+        .requires(Text.FromFunction(lambda person, name: person.name == name))
         .create()
     )
 
-`.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold; a predicate's rule is
-their conjunction. A condition is any spec of the algebra: a term below, a writer, or what `Python.Text.FromFunction`
-reads from a function, such as `FromFunction(lambda c: c.age >= 18)`. Its free names are the symbols, written as Basic
-variables (`E.variable("c")`) of the same names. A predicate without symbols is a statement about the whole store.
+`.parameters(...)` takes property specs, as an object schema's `.properties(...)` does, each with a name and, optionally,
+a type. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold; the rule is
+their conjunction. A condition is any spec of the algebra: a term, a writer, or what `Python.Text.FromFunction` reads
+from a function whose parameters are the symbols and parameters. A builder gives the variables it declares by name, so
+`pred.person` is the variable `person` once `pred.symbols(APerson)` declares it. A predicate without symbols is a
+statement about the whole store; one without a name is written inline, where it is used.
 
-The algebra, `DIALECT`, extends mbse-expressions' Basic with terms about a store's data, each a data class with a
-builder, so a term is built as a predicate is, by a spec (data, or a callable taking the builder):
+A predicate is a term of the algebra, `DIALECT`, which extends mbse-expressions' Basic: it binds its symbols and
+parameters within its rule (an import, in mbse-expressions' terms). Applying it, `HasName(pred.person, "alice")`, is a
+term too, `OfApply`, which holds the predicate itself, by reference, and arguments for its symbols and then its
+parameters, in order: it holds when the predicate's rule holds with them bound. A predicate used in several places is one
+object, and is written once.
+
+The algebra's other terms, each a data class with a builder, are built as a predicate is, from a spec (data, or a
+callable taking the builder):
 
 - `Exists(spec)` and `Forall(spec)`: whether some, or every, binding of the builder's `.symbols({...})` to objects of
   their schemas satisfies its `.requires(...)` and `.forbids(...)` (several symbols are their cross product);
@@ -29,42 +37,37 @@ builder, so a term is built as a predicate is, by a spec (data, or a callable ta
   its property values, by name. It is Basic's `any` over `entries(c, 'phones')`;
 - `Choice(lambda ch: ch.option(0.35, spec).option(0.65, spec))`: a weighted disjunction, which holds when any of its
   options holds; the weights, positive and summing to 1, are how often a generator chooses each option, and what a
-  characterizer estimates.
-
-So mandatory, possible and forbidden links are predicates:
-
-    owns = Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(
-        Predicates.Contains(c.phones, lambda e: e.phone == p)))
-    mandatory = Predicates.Builder().name("Mandatory").symbols({"c": Contact}).requires(owns).create()
-    forbidden = Predicates.Builder().name("Forbidden").symbols({"c": Contact}).forbids(owns).create()
-    possible = Predicates.Builder().name("Possible").symbols({"c": Contact}).requires(
-        Predicates.Choice(lambda ch: ch.option(0.35, owns).option(0.65, E.operation("not", owns)))).create()
+  characterizer estimates;
+- `OfSet`: predicates, gathered in order.
 
 A quantifier ranges over its schema's extent in the store (its `extent` term: what the store's singletons reach).
-`DIALECT` validates the trees that mix the algebra's terms with Basic's; `Evaluator(store)` evaluates them, with the store
-giving extents, and Basic's three-valued rules for everything else.
+`DIALECT` validates the trees that mix the algebra's terms with Basic's; `Evaluator(store)` evaluates them, with the
+store giving extents, and Basic's three-valued rules for everything else.
 
-Predicates are mbse-schemas reference objects with a meta-schema, `Patterns.Predicate`: a symbol's schema is written as
-a property's type is, by its name or inline, and a predicate is its rule's parent through Basic's relation
-`Expressions.Arguments`. `Constraints` gathers predicates in sets, and reads and writes them.
+Predicates and sets are mbse-schemas reference objects, as every term is, with meta-schemas `Patterns.Predicate` and
+`Patterns.Set`: a symbol's schema is written as a property's type is, by its name or inline, and a term is its
+arguments' parent through Basic's relation `Expressions.Arguments`. Reading resolves the symbols' schemas by name, so it
+goes through a store that resolves them (`Constraints.OfStore`).
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
 from mbse.Expressions import Domains as BasicDomains, Evaluators as Basic, Expressions as E
 from mbse.Expressions.Dialects.Python import Text
 from mbse.Expressions.Framework import Evaluators as F, Terms
-from mbse.Schemas.Framework import Bindings, Modules, Schemas, Stores, Visitors
+from mbse.Schemas.Framework import Modules, Schemas, Stores
 
-__all__ = ["DIALECT", "Builder", "OfPredicate", "Exists", "Forall", "Contains", "Choice", "Members", "Evaluator",
-           "holds", "OfExtent", "OfForall", "OfExists", "OfChoice", "OfOption", "PREDICATE", "MEMBERS"]
+__all__ = ["DIALECT", "OfPredicate", "OfApply", "OfSet", "Exists", "Forall", "Contains", "Choice", "Evaluator",
+           "holds", "OfExtent", "OfForall", "OfExists", "OfChoice", "OfOption", "SYMBOLS", "PARAMETERS", "PREDICATE",
+           "SET", "resolving", "Declaring"]
 
-PREDICATE, MEMBERS = "Patterns.Predicate", "Patterns.Members"
+PREDICATE, SET = "Patterns.Predicate", "Patterns.Set"
 
 
 def _schema_name(schema: Any) -> str:
@@ -84,6 +87,53 @@ def _conjunction(conditions: list[Any]) -> Any:
 
 def _negation(spec: Any) -> Any:
     return E.operation("not", DIALECT.resolve(spec)).data
+
+
+# --- Symbols and parameters: value properties, whose schemas are resolved by name while reading ---
+
+_STORES: list[Stores.Store] = [Stores.Catalog()]  # type: ignore[list-item]
+
+
+@contextmanager
+def resolving(store: Stores.Store) -> Iterator[None]:
+    """Within it, symbols' and parameters' schemas read from a snapshot are resolved by name in `store`."""
+    _STORES.append(store)
+    try:
+        yield
+    finally:
+        _STORES.pop()
+
+
+def _type(entry: Mapping[str, Any]) -> Any:
+    return Modules.resolve(_STORES[-1], entry["type"]) if entry.get("type") is not None else None
+
+
+def _typed(name: str, schema: Any) -> dict[str, Any]:
+    return {"name": name} if schema is None else {"name": name, "type": Modules.reference(schema)}
+
+
+_LIST = Schemas.OfIndexed.Builder().of(Schemas.OfProperty.Schema).create()
+
+SYMBOLS = Terms.ValueProperty(_LIST, lambda symbols: [_typed(n, s) for n, s in symbols.items()] or None,
+                              lambda plain: {entry["name"]: _type(entry) for entry in plain})
+"""Symbols by name, each with the schema of the objects it binds, written as an object schema's properties are; none
+are not written."""
+
+PARAMETERS = SYMBOLS
+"""Parameters by name, each with its type, or None for a parameter of any type, written as symbols are."""
+
+
+VALUES_HELD = ("symbols", "parameters")
+
+
+class Declaring:
+    """A builder that declares variables: `builder.name` gives the variable `name` once it is declared. Its class gives
+    the names it declares, by `_declared()`."""
+
+    def __getattr__(self, name: str) -> Any:
+        if not name.startswith("_") and name in self._declared():  # type: ignore[attr-defined]
+            return E.variable(name)
+        raise AttributeError(name)
 
 
 # --- Terms ---
@@ -160,10 +210,84 @@ class OfChoice(Terms.Term):
         return []
 
 
+@dataclass(eq=False)
+class OfPredicate(Terms.Term):
+    """A rule over symbols and parameters, which it binds within the rule. Calling it, `predicate(*arguments)`, applies
+    it: see `OfApply`."""
+
+    KIND = "predicate"
+    ROLE = Terms.IMPORT
+    PROPERTIES = {"name": str, "description": str}
+    OPTIONAL = frozenset({"name", "description"})
+    VALUES = {"symbols": SYMBOLS, "parameters": PARAMETERS}
+    SLOTS = ("rule",)
+    name: str | None = None
+    description: str | None = None
+    rule: Any = None
+    symbols: dict[str, Any] = field(default_factory=dict)  # symbol -> schema
+    parameters: dict[str, Any] = field(default_factory=dict)  # parameter -> type, or None
+
+    def __post_init__(self) -> None:
+        self.symbols = {} if self.symbols is None else self.symbols
+        self.parameters = {} if self.parameters is None else self.parameters
+
+    def binds(self) -> tuple[str, ...]:
+        return (*self.symbols, *self.parameters)
+
+    def check(self) -> list[str]:
+        return [f"symbol {symbol!r} needs a named reference object schema" for symbol, schema in self.symbols.items()
+                if not (isinstance(schema, Schemas.OfObject.Data) and schema.ref and schema.name is not None)]
+
+    def call(self, *arguments: Any) -> OfApply:
+        """The predicate applied to `arguments`, specs for its symbols and then its parameters, in order."""
+        return OfApply(self, tuple(DIALECT.resolve(argument) for argument in arguments))
+
+    __call__ = call
+
+    @staticmethod
+    def resolve(spec: Any) -> OfPredicate:
+        """A predicate, or what a callable taking a predicate builder builds."""
+        return Terms.resolve(spec, OfPredicate, _PredicateBuilder, "a predicate")
+
+
+@dataclass(eq=False)
+class OfApply(Terms.Term):
+    """A predicate applied to arguments, for its symbols and then its parameters: whether its rule holds with them
+    bound."""
+
+    KIND = "apply"
+    ROLE = Terms.APPLICATION
+    SLOTS = ("predicate",)
+    VARIADIC = "arguments"
+    predicate: Any = None
+    arguments: tuple[Any, ...] = ()
+
+    def check(self) -> list[str]:
+        if not isinstance(self.predicate, OfPredicate):
+            return ["an application's predicate must be a predicate"] if self.predicate is not None else []
+        wanted = len(self.predicate.binds())
+        if len(self.arguments) != wanted:
+            return [f"{self.predicate.name!r} takes {wanted} arguments, got {len(self.arguments)}"]
+        return []
+
+
+@dataclass(eq=False)
+class OfSet(Terms.Term):
+    """Predicates, in order."""
+
+    KIND = "set"
+    ROLE = Terms.APPLICATION
+    VARIADIC = "predicates"
+    predicates: tuple[Any, ...] = ()
+
+    def check(self) -> list[str]:
+        return [] if all(isinstance(p, OfPredicate) for p in self.predicates) else ["a set's arguments are predicates"]
+
+
 # --- Builders ---
 
 
-class _QuantifiedBuilder(Terms.Builder):
+class _QuantifiedBuilder(Terms.Builder, Declaring):
     """Builds a quantifier. DSL: `.symbols({name: schema})`, each schema a named schema or its name, added to those
     already given, and `.requires(spec)` and `.forbids(spec)`, which add conditions to the body. The first symbol is
     this quantifier's; each other is a quantifier of the same kind in the body, within which the conditions hold. As
@@ -173,6 +297,11 @@ class _QuantifiedBuilder(Terms.Builder):
         super().__init__(instance)
         self._inner: dict[str, str] = {}
         self._conditions: list[Any] = []
+
+    def _declared(self) -> tuple[str, ...]:
+        state = self.__dict__.get("state")
+        name = None if state is None else state.values.get("name")
+        return (*([] if name is None else [name]), *self.__dict__.get("_inner", {}))
 
     def symbols(self, symbols: Mapping[str, Any]) -> Any:
         for name, schema in symbols.items():
@@ -253,18 +382,100 @@ class _ExtentBuilder(Terms.Builder):
         return self.set("schema", _schema_name(schema))
 
 
-_KINDS = (OfExtent, OfForall, OfExists, OfChoice, OfOption)
-_BUILDERS = (_ExtentBuilder, _ForallBuilder, _ExistsBuilder, _ChoiceBuilder, _OptionBuilder)
+class _PredicateBuilder(Terms.Builder, Declaring):
+    """Builds a predicate. DSL: `.name(str)`, `.description(str)`, `.symbols({name: schema})` and `.parameters(*specs)`,
+    each added to those already given, in order, and `.requires(spec)` and `.forbids(spec)`, which add conditions to
+    the rule. `.symbols(...)` and `.parameters(...)` are written as the builder is finalized."""
+
+    _data = OfPredicate
+
+    def __init__(self, instance: Any = None):
+        super().__init__(instance)
+        self._symbols: dict[str, Any] = {} if instance is None else dict(instance.symbols)
+        self._parameters: dict[str, Any] = {} if instance is None else dict(instance.parameters)
+        self._conditions: list[Any] = []
+        for name in VALUES_HELD:  # held as data, not in their plain form, which only reading a snapshot resolves
+            self.state.values.pop(name, None)
+
+    def _declared(self) -> tuple[str, ...]:
+        return (*self.__dict__.get("_symbols", {}), *self.__dict__.get("_parameters", {}))
+
+    def name(self, name: str) -> _PredicateBuilder:
+        return self.set("name", name)
+
+    def description(self, text: str) -> _PredicateBuilder:
+        return self.set("description", text)
+
+    def symbols(self, symbols: Mapping[str, Any]) -> _PredicateBuilder:
+        """Symbols by name, each with the schema of the objects it binds, in order; added to those already given."""
+        self._symbols.update(symbols)
+        return self
+
+    def parameters(self, *specs: Schemas.OfProperty.Spec) -> _PredicateBuilder:
+        """Parameters, each a property spec (`lambda p: p.name("name")`, with `.of(type)` optionally), in order."""
+        for spec in specs:
+            built = spec(Schemas.OfProperty.Builder()).create()
+            self._parameters[built.name] = built.type
+        return self
+
+    def requires(self, spec: Any) -> _PredicateBuilder:
+        """Adds a condition: a spec of the algebra whose free names are the symbols and parameters."""
+        self._conditions.append(DIALECT.resolve(spec))
+        return self
+
+    def forbids(self, spec: Any) -> _PredicateBuilder:
+        """Adds the condition that `spec` does not hold."""
+        self._conditions.append(_negation(spec))
+        return self
+
+    def _fold(self, made: Any) -> Any:
+        made.symbols, made.parameters = dict(self._symbols), dict(self._parameters)
+        return made
+
+    def _rule(self) -> None:
+        if self._conditions:
+            rule = next((entry.links.get("argument") for entry in self.state.entries.get("arguments", [])), None)
+            self.argument("rule", _conjunction([*([] if rule is None else [rule]), *self._conditions]))
+            self._conditions = []
+
+    def create(self) -> Any:
+        self._rule()
+        return self._fold(super().create())
+
+    def clone(self) -> Any:
+        self._rule()
+        return self._fold(super().clone())
+
+    def update(self) -> Any:
+        self._rule()
+        return self._fold(super().update())
+
+
+class _SetBuilder(Terms.Builder):
+    """Builds a set. DSL: `.predicates(*specs)`, each a predicate or a callable taking a predicate builder, added in
+    order."""
+
+    _data = OfSet
+
+    def predicates(self, *specs: Any) -> _SetBuilder:
+        return self.arguments(*map(OfPredicate.resolve, specs))
+
+
+_KINDS = (OfExtent, OfForall, OfExists, OfChoice, OfOption, OfPredicate, OfApply, OfSet)
+_BUILDERS = (_ExtentBuilder, _ForallBuilder, _ExistsBuilder, _ChoiceBuilder, _OptionBuilder, _PredicateBuilder,
+             Terms.Builder, _SetBuilder)
+_NAMES = {"predicate": PREDICATE, "set": SET}
 
 DIALECT = Terms.Declared(
     "Predicates", _KINDS, domain_of=BasicDomains.of, extends=E.DIALECT,
-    builders={kind.KIND: builder for kind, builder in zip(_KINDS, _BUILDERS)},
-    schema_names={kind.KIND: f"Patterns.Of{kind.KIND.capitalize()}" for kind in _KINDS},
+    builders={kind.KIND: type(f"{kind.__name__}Builder", (builder,), {"_data": kind}) if builder is Terms.Builder
+              else builder for kind, builder in zip(_KINDS, _BUILDERS)},
+    schema_names={kind.KIND: _NAMES.get(kind.KIND, f"Patterns.Of{kind.KIND.capitalize()}") for kind in _KINDS},
 )
 """The predicate algebra: Basic's kinds, and the kinds above."""
 
-for _kind, _builder in zip(_KINDS, _BUILDERS):
-    _kind.Builder = _builder  # type: ignore[attr-defined]
+for _kind in _KINDS:
+    _kind.Builder = DIALECT.builders[_kind.KIND]  # type: ignore[attr-defined]
 
 
 def Exists(spec: Any) -> OfExists:
@@ -296,184 +507,20 @@ def Contains(adjacency: Any, condition: Callable[[Any], Any]) -> E.OfQuantifier.
     return E.quantifier("any", code.co_varnames[0], entries, Text.FromFunction(condition)).data
 
 
-# --- Predicates ---
-
-
-@dataclass(eq=False)
-class _PredicateData:
-    """A named rule over symbols, each bound to an object of its schema in a match."""
-
-    name: str | None = None
-    description: str | None = None
-    symbols: dict[str, Any] = field(default_factory=dict)  # symbol -> schema
-    rule: Any = None  # an expression of the predicate algebra
-
-    def validate(self) -> list[str]:
-        label = f"predicate {self.name!r}"
-        problems = [f"{label}: a predicate needs a {what}" for what, value in (("name", self.name), ("rule", self.rule))
-                    if value is None]
-        for symbol, schema in self.symbols.items():
-            if not (isinstance(schema, Schemas.OfObject.Data) and schema.ref and schema.name is not None):
-                problems.append(f"{label}: symbol {symbol!r} needs a named reference object schema")
-        rule = [] if self.rule is None else DIALECT.validate(self.rule, bound=tuple(self.symbols), core=True)
-        return problems + [f"{label}: {problem}" for problem in rule]
-
-    def identity(self) -> Any:
-        return id(self)
-
-    def schema_name(self) -> str:
-        return PREDICATE
-
-    def owner(self) -> None:
-        return None
-
-    def accept(self, visitor: Visitors.OfObject) -> None:
-        Bindings.accept(_BINDING, self, visitor)
-
-
-class _PredicateBuilder:
-    """Builds a predicate, as mbse-schemas' builders build. DSL: `.name(str)`, `.description(str)`,
-    `.symbols({name: schema})`, added to those already given, in order, and `.requires(spec)` and `.forbids(spec)`,
-    which add conditions to the rule."""
-
-    def __init__(self, instance: _PredicateData | None = None):
-        self._source = instance
-        self._fields: dict[str, Any] = {} if instance is None else {**vars(instance), "symbols": dict(instance.symbols)}
-
-    def name(self, name: str) -> _PredicateBuilder:
-        self._fields["name"] = name
-        return self
-
-    def description(self, text: str) -> _PredicateBuilder:
-        self._fields["description"] = text
-        return self
-
-    def symbols(self, symbols: Mapping[str, Any]) -> _PredicateBuilder:
-        """Symbols by name, each with the schema of the objects it binds, in order; added to those already given."""
-        self._fields["symbols"] = {**self._fields.get("symbols", {}), **symbols}
-        return self
-
-    def requires(self, spec: Any) -> _PredicateBuilder:
-        """Adds a condition: a spec of the algebra whose free names are the symbols."""
-        self._fields["rule"] = _conjunction([*(r for r in [self._fields.get("rule")] if r is not None), DIALECT.resolve(spec)])
-        return self
-
-    def forbids(self, spec: Any) -> _PredicateBuilder:
-        """Adds the condition that `spec` does not hold."""
-        return self.requires(_negation(spec))
-
-    def create(self) -> _PredicateData:
-        """A new predicate. Only valid without a source instance."""
-        if self._source is not None:
-            raise ValueError("create() is only valid without a source instance; use clone() or update()")
-        return _PredicateData(**self._fields)
-
-    def clone(self) -> _PredicateData:
-        """A new predicate, leaving the source instance untouched. Only valid with a source instance."""
-        if self._source is None:
-            raise ValueError("clone() is only valid with a source instance")
-        return _PredicateData(**self._fields)
-
-    def update(self) -> _PredicateData:
-        """Writes the builder's state into the source instance and returns it. Only valid with a source instance."""
-        if self._source is None:
-            raise ValueError("update() is only valid with a source instance")
-        vars(self._source).update(self._fields)
-        return self._source
-
-
-def _text(name: str) -> Any:
-    return lambda p: p.name(name).of(lambda t: t.as_native(str))
-
-
-Members = (
-    Schemas.OfRelation.Builder().name(MEMBERS).links("set", "predicate").properties(
-        lambda p: p.name("index").of(lambda t: t.as_native(int))).create()
-)
-"""The relation of a set to its predicates, each at its `index` in the set."""
-
-
-class OfPredicate:
-    """A predicate: `Data`, its `Builder` and its meta-schema `Schema`."""
-
-    Data = _PredicateData
-    Builder = _PredicateBuilder
-    Spec = _PredicateData | Callable[[_PredicateBuilder], _PredicateBuilder]
-    Schema = Schemas.OfObject.Builder().name(PREDICATE).ref().properties(
-        _text("name"), _text("description"),
-        lambda p: p.name("symbols").of(lambda t: t.as_indexed(lambda i: i.of(Schemas.OfProperty.Schema)))).relations(
-        lambda r: r.name("rule").of(Terms.Arguments).me("parent"),
-        lambda r: r.name("sets").of(Members).me("predicate")).create()
-
-    @staticmethod
-    def resolve(spec: OfPredicate.Spec) -> _PredicateData:
-        if isinstance(spec, _PredicateData):
-            return spec
-        if not callable(spec):
-            raise TypeError(f"expected a predicate or a callable taking its builder, got {spec!r}")
-        return spec(_PredicateBuilder()).create()
-
-
-Builder = _PredicateBuilder
-"""`Predicates.Builder()` builds a predicate: `OfPredicate.Builder`."""
-
-
-def target(entry: Bindings.Entry, link: str, kind: Any, what: str) -> Any:
-    """The target of an entry's link, which must be a `kind`."""
-    found = entry.links.get(link)
-    if found is None:
-        raise ValueError(f"link {link!r} is not set")
-    if not isinstance(found, kind):
-        raise TypeError(f"{what} must be {'an expression' if what == 'a rule' else 'a predicate'}")
-    return found
-
-
-def _read(predicate: _PredicateData) -> Bindings.State:
-    """A predicate's state, as `Bindings` reads it."""
-    values: dict[str, Any] = {name: getattr(predicate, name) for name in ("name", "description")
-                              if getattr(predicate, name) is not None}
-    if predicate.symbols:
-        values["symbols"] = [{"name": symbol, "type": Modules.reference(schema)}
-                             for symbol, schema in predicate.symbols.items()]
-    rule = [] if predicate.rule is None else [Bindings.Entry({"argument": predicate.rule}, {"index": 0})]
-    return Bindings.State(values, {"rule": rule})
-
-
-def _make(store: Stores.Store, state: Bindings.State) -> _PredicateData:
-    """The predicate a state describes, its symbols' schemas resolved by name in `store`."""
-    rules = state.entries.get("rule", [])  # none yet while a snapshot is read: its entries come after its objects
-    if len(rules) > 1:
-        raise ValueError(f"a predicate has one rule, got {len(rules)}")
-    rule = target(rules[0], "argument", DIALECT.terms(), "a rule") if rules else None
-    symbols = {symbol["name"]: Modules.resolve(store, symbol["type"]) for symbol in state.values.get("symbols", [])}
-    return _PredicateData(state.values.get("name"), state.values.get("description"), symbols, rule)
-
-
-def binding(store: Stores.Store) -> Bindings.Binding:
-    """The binding of predicates to their meta-schema, reading symbols' schemas by name in `store`."""
-    def assign(instance: Any, state: Bindings.State) -> Any:
-        vars(instance).update(vars(_make(store, state)))
-        return instance
-    return Bindings.Binding(OfPredicate.Schema, _read, lambda state: _make(store, state), assign, implied=["sets"])
-
-
-_BINDING = binding(Stores.Catalog())
-
-
 # --- Evaluation ---
 
 
 class Evaluator:
-    """Evaluates predicates over `store`: Basic's rules, with extents from the store. Extents are read once per
-    evaluator, so an evaluator sees the store as it was when first asked."""
+    """Evaluates predicates over `store`: Basic's rules, with extents from the store and applications of predicates.
+    Extents are read once per evaluator, so an evaluator sees the store as it was when first asked."""
 
-    def __init__(self, store: Stores.Store):
+    def __init__(self, store: Stores.Store, dialect: Terms.Declared | None = None):
         self.store = store
         self._extents: dict[str, tuple[Any, ...]] = {}
-        self.interpreter = F.Interpreter(DIALECT, {
+        self.interpreter = F.Interpreter(dialect or DIALECT, {
             "operation": Basic.OPERATIONS, "quantifier": Basic.QUANTIFIERS,
             "extent": self._extent, "forall": Basic.QUANTIFIERS["all"], "exists": Basic.QUANTIFIERS["any"],
-            "choice": _choice, "option": lambda thunks, node, scope: thunks[0](),
+            "choice": _choice, "option": lambda thunks, node, scope: thunks[0](), "apply": self._apply,
         }, typed=BasicDomains.Value)
 
     def __call__(self, expression: Any, variables: Mapping[str, Any] | None = None) -> Any:
@@ -488,6 +535,11 @@ class Evaluator:
 
     def _extent(self, thunks: Any, node: OfExtent, scope: Any) -> tuple[Any, ...]:
         return self.extent(node.schema)  # type: ignore[arg-type]
+
+    def _apply(self, thunks: Any, node: OfApply, scope: Any) -> Any:
+        predicate = node.predicate
+        values = [thunk() for thunk in thunks[1:]]
+        return self.interpreter(predicate.rule, dict(zip(predicate.binds(), values)))
 
 
 def _choice(thunks: Any, node: OfChoice, scope: Any) -> bool | None:

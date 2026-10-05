@@ -44,7 +44,7 @@ export type Match = Record<string, Visitable>;
 /** A store that answers queries. */
 export interface QueryableStore extends Stores.Store {
   /** The predicate's matches for which its rule holds (or is unknown, with `unknown`), as they are read. */
-  select(predicate: Predicates.OfPredicate.Data, variables?: Variables | null, unknown?: boolean): IterableIterator<Match>;
+  select(predicate: Predicates.OfPredicate, variables?: Variables | null, unknown?: boolean): IterableIterator<Match>;
 }
 
 /** The rule's top-level conjuncts: the arguments of nested `and`s, or the rule itself. */
@@ -113,7 +113,7 @@ class Plan {
   readonly first: unknown[];
   readonly tests: unknown[][];
 
-  constructor(readonly store: Stores.Store, predicate: Predicates.OfPredicate.Data, variables: Variables) {
+  constructor(readonly store: Stores.Store, predicate: Predicates.OfPredicate, variables: Variables) {
     const symbols = new Map(predicate.symbols) as Map<string, Schemas.OfObject.Data>;
     for (const [symbol, schema] of symbols) {
       if (!(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null)) {
@@ -238,22 +238,18 @@ export class Scan implements QueryableStore {
     return this.store.extent(name);
   }
 
-  random(): Stores.Random {
-    return this.store.random();
-  }
-
-  select(predicate: Predicates.OfPredicate.Data, variables: Variables | null = null, unknown = false): Generator<Match> {
+  select(predicate: Predicates.OfPredicate, variables: Variables | null = null, unknown = false): Generator<Match> {
     return new Plan(this.store, predicate, variables ?? {}).matches(unknown);
   }
 
   /** The plan of a query, one line per symbol: how its candidates are found, and the tests then made. */
-  explain(predicate: Predicates.OfPredicate.Data, variables: Variables | null = null): string[] {
+  explain(predicate: Predicates.OfPredicate, variables: Variables | null = null): string[] {
     return new Plan(this.store, predicate, variables ?? {}).explain();
   }
 }
 
 /** `store.select(...)` for a queryable store, and a scan of any other. */
-export function select(store: Stores.Store, predicate: Predicates.OfPredicate.Data, variables: Variables | null = null,
+export function select(store: Stores.Store, predicate: Predicates.OfPredicate, variables: Variables | null = null,
   unknown = false): IterableIterator<Match> {
   const queryable = "select" in store && typeof (store as Partial<QueryableStore>).select === "function"
     ? store as QueryableStore : new Scan(store);

@@ -17,7 +17,7 @@
  *
  * Structure is mbse-schemas' `Validators.Validate(store)`'s to check: run both. The predicates are checked statically
  * (`Constraints.check`) when the validator is made, so that a rule that cannot be right is reported once, not per
- * match.
+ * match; a predicate with parameters is refused, since it holds only where it is applied to their values.
  */
 
 import { Errors, Reachable, Schemas, Stores } from "@mbse/schemas/Framework";
@@ -41,13 +41,18 @@ function product<T>(pools: readonly (readonly T[])[]): T[][] {
   return pools.reduce<T[][]>((combinations, pool) => combinations.flatMap((c) => pool.map((item) => [...c, item])), [[]]);
 }
 
-export function Validate(store: Stores.Store, predicates: Iterable<Predicates.OfPredicate.Spec> | Constraints.OfSet.Data,
+export function Validate(store: Stores.Store, predicates: Iterable<Predicates.OfPredicate.Spec> | Predicates.OfSet,
   options: { unknown?: string } = {}): Validator {
   const unknown = options.unknown ?? "report";
   if (!(UNKNOWN as readonly string[]).includes(unknown)) {
     throw new Errors.ValueError(`unknown must be 'report', 'ignore' or 'violation', got ${repr(unknown)}`);
   }
   const checked = Constraints.check(predicates);
+  for (const predicate of checked.predicates as Predicates.OfPredicate[]) {
+    if (predicate.parameters.size > 0) {
+      throw new Errors.ValueError(`predicate ${repr(predicate.name)} has parameters: it is checked where it is applied`);
+    }
+  }
 
   const problem = (evaluate: Predicates.Evaluator, rule: unknown, scope: Record<string, unknown>): string | null => {
     let result: boolean | null;

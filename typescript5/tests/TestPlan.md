@@ -9,3 +9,7 @@ only what differs. The deliberate differences between the implementations are in
 - CONF-03 compares snapshots as JSON with bigints marked, since `Plain` gives `bigint`s.
 - ALG-01 also refuses a `Contains` condition whose one parameter is destructured, which has no name to bind; a Python
   lambda cannot destructure.
+- CON-01 checks that a builder gives a name it has not declared as `undefined`, where Python raises `AttributeError`;
+  CON-07 applies predicates with `.call(...)`.
+- GEN-01 refuses an infinite weight, as Python does, and has no `int` weight to refuse; random words and bounds are
+  `bigint`s.

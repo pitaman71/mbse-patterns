@@ -1,0 +1,405 @@
+{
+  "root": "s0",
+  "objects": {
+    "s0": {
+      "kind": "weights",
+      "name": "Names",
+      "symbols": [
+        {
+          "name": "person",
+          "type": {
+            "named": {
+              "name": "Contact"
+            }
+          }
+        }
+      ],
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s1",
+            "$schema": "Patterns.OfCase"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s2",
+            "$schema": "Patterns.OfCase"
+          },
+          "index": 1
+        },
+        {
+          "argument": {
+            "$ref": "s3",
+            "$schema": "Patterns.OfCase"
+          },
+          "index": 2
+        },
+        {
+          "argument": {
+            "$ref": "s4",
+            "$schema": "Patterns.OfCase"
+          },
+          "index": 3
+        }
+      ]
+    },
+    "s1": {
+      "kind": "case",
+      "weight": 10.0,
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s5",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s2": {
+      "kind": "case",
+      "weight": 5.0,
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s6",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s3": {
+      "kind": "case",
+      "weight": 15.0,
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s7",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s4": {
+      "kind": "case",
+      "weight": 7.0,
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s8",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s5": {
+      "kind": "predicate",
+      "symbols": [
+        {
+          "name": "person",
+          "type": {
+            "named": {
+              "name": "Contact"
+            }
+          }
+        }
+      ],
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s9",
+            "$schema": "Patterns.OfApply"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s6": {
+      "kind": "predicate",
+      "symbols": [
+        {
+          "name": "person",
+          "type": {
+            "named": {
+              "name": "Contact"
+            }
+          }
+        }
+      ],
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s10",
+            "$schema": "Patterns.OfApply"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s7": {
+      "kind": "predicate",
+      "symbols": [
+        {
+          "name": "person",
+          "type": {
+            "named": {
+              "name": "Contact"
+            }
+          }
+        }
+      ],
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s11",
+            "$schema": "Patterns.OfApply"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s8": {
+      "kind": "predicate",
+      "symbols": [
+        {
+          "name": "person",
+          "type": {
+            "named": {
+              "name": "Contact"
+            }
+          }
+        }
+      ],
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s12",
+            "$schema": "Patterns.OfApply"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s9": {
+      "kind": "apply",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s13",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s14",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 1
+        },
+        {
+          "argument": {
+            "$ref": "s15",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 2
+        }
+      ]
+    },
+    "s10": {
+      "kind": "apply",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s13",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s16",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 1
+        },
+        {
+          "argument": {
+            "$ref": "s17",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 2
+        }
+      ]
+    },
+    "s11": {
+      "kind": "apply",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s13",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s18",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 1
+        },
+        {
+          "argument": {
+            "$ref": "s19",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 2
+        }
+      ]
+    },
+    "s12": {
+      "kind": "apply",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s13",
+            "$schema": "Patterns.Predicate"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s20",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 1
+        },
+        {
+          "argument": {
+            "$ref": "s21",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 2
+        }
+      ]
+    },
+    "s13": {
+      "kind": "predicate",
+      "name": "HasName",
+      "symbols": [
+        {
+          "name": "person",
+          "type": {
+            "named": {
+              "name": "Contact"
+            }
+          }
+        }
+      ],
+      "parameters": [
+        {
+          "name": "name"
+        }
+      ],
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s22",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        }
+      ]
+    },
+    "s14": {
+      "kind": "variable",
+      "name": "person"
+    },
+    "s15": {
+      "kind": "literal",
+      "str": "alice"
+    },
+    "s16": {
+      "kind": "variable",
+      "name": "person"
+    },
+    "s17": {
+      "kind": "literal",
+      "str": "ben"
+    },
+    "s18": {
+      "kind": "variable",
+      "name": "person"
+    },
+    "s19": {
+      "kind": "literal",
+      "str": "chermon"
+    },
+    "s20": {
+      "kind": "variable",
+      "name": "person"
+    },
+    "s21": {
+      "kind": "literal",
+      "str": "davi"
+    },
+    "s22": {
+      "kind": "operation",
+      "name": "eq",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s23",
+            "$schema": "Expressions.OfOperation"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s24",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s23": {
+      "kind": "operation",
+      "name": "get",
+      "arguments": [
+        {
+          "argument": {
+            "$ref": "s25",
+            "$schema": "Expressions.OfVariable"
+          },
+          "index": 0
+        },
+        {
+          "argument": {
+            "$ref": "s26",
+            "$schema": "Expressions.OfLiteral"
+          },
+          "index": 1
+        }
+      ]
+    },
+    "s24": {
+      "kind": "variable",
+      "name": "name"
+    },
+    "s25": {
+      "kind": "variable",
+      "name": "person"
+    },
+    "s26": {
+      "kind": "literal",
+      "str": "name"
+    }
+  }
+}

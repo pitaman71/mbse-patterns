@@ -1,6 +1,7 @@
 # mbse-patterns in Python
 
-Install `mbse-patterns`, then import `Predicates`, `Constraints`, `Validators` and `Queries` from `mbse.Patterns`, the rules' writers
+Install `mbse-patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions` and
+`Generators` from `mbse.Patterns`, the rules' writers
 from `mbse.Expressions` (and `Text.FromFunction` from `mbse.Expressions.Dialects.Python`), and the data's framework from
 `mbse.Schemas.Framework`.
 
@@ -12,8 +13,8 @@ against data, and used as queries.
 ```python
 from mbse.Expressions import Expressions as E
 from mbse.Expressions.Dialects.Python import Text
-from mbse.Patterns import Constraints, Predicates, Queries, Validators
-from mbse.Schemas.Framework import JSON, Proxies, Schemas as S
+from mbse.Patterns import Constraints, Distributions, Generators, Predicates, Queries, Validators
+from mbse.Schemas.Framework import JSON, Proxies, Schemas as S, Stores
 
 
 def native(name, kind):
@@ -34,20 +35,20 @@ for schema in (Directory, Contact, Phone, Listed, Phones):
 
 # Predicates: named rules over symbols, built fluently. A condition may be read from a lambda, or written with
 # writers; the symbols are written as variables of the same names.
-IsAnAdult = (Predicates.Builder().name("IsAnAdult").description("18 or older")
+IsAnAdult = (Predicates.OfPredicate.Builder().name("IsAnAdult").description("18 or older")
              .symbols({"the": Contact}).requires(Text.FromFunction(lambda the: the.age >= 18)).create())
 c, p = E.variable("c"), E.variable("p")
 owns = Predicates.Contains(c.phones, lambda e: e.phone == p)  # p is one of c's phones
-OwnedNumbered = (Predicates.Builder().name("OwnedNumbered").symbols({"c": Contact, "p": Phone})
+OwnedNumbered = (Predicates.OfPredicate.Builder().name("OwnedNumbered").symbols({"c": Contact, "p": Phone})
                  .requires(E.operation("implies", owns, p.has("number"))).create())
 rules = Constraints.check([IsAnAdult, OwnedNumbered])
 
 # The algebra: quantifiers over a schema's objects, built as predicates are. Mandatory, forbidden and possible links.
 HasAPhone = Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(owns))
-EveryoneHasAPhone = (Predicates.Builder().name("EveryoneHasAPhone")  # no symbols: a statement about the whole store
+EveryoneHasAPhone = (Predicates.OfPredicate.Builder().name("EveryoneHasAPhone")  # no symbols: a statement about the whole store
                      .requires(Predicates.Forall(lambda q: q.symbols({"c": Contact}).requires(HasAPhone))).create())
-Phoneless = Predicates.Builder().name("Phoneless").symbols({"c": Contact}).forbids(HasAPhone).create()
-Sometimes = (Predicates.Builder().name("Sometimes").symbols({"c": Contact}).requires(Predicates.Choice(
+Phoneless = Predicates.OfPredicate.Builder().name("Phoneless").symbols({"c": Contact}).forbids(HasAPhone).create()
+Sometimes = (Predicates.OfPredicate.Builder().name("Sometimes").symbols({"c": Contact}).requires(Predicates.Choice(
     lambda ch: ch.option(0.35, HasAPhone).option(0.65, E.operation("not", HasAPhone)))).create())
 
 # The store's data is what its singleton directory reaches.
@@ -75,17 +76,31 @@ assert [p.name for p in copy.predicates] == ["IsAnAdult", "OwnedNumbered"] and c
 # Queries: matches stream lazily, planned from the rule's shape.
 query = Queries.Scan(store)
 assert [m["the"] for m in query.select(IsAnAdult)] == [ann]
-numbered = (Predicates.Builder().name("Numbered").symbols({"c": Contact, "p": Phone})
+numbered = (Predicates.OfPredicate.Builder().name("Numbered").symbols({"c": Contact, "p": Phone})
             .requires(owns).requires(p.has("number")).create())
 assert query.explain(numbered) == ["c: scan Contact", "p: c.phones to phone, any number, then 2 tests"]
 assert [(m["c"].name, m["p"].number) for m in query.select(numbered)] == [("Ann", "555-0100")]
 assert list(query.select(IsAnAdult, unknown=True)) == [{"the": ann}, {"the": bob}]
+
+# Parameters: a predicate applied by reference, to a symbol and a value. Distributions weigh cases of predicates, given
+# by reference or inline, in decreasing precedence; a generator builds new data from them, from the store's seed.
+HasName = (Predicates.OfPredicate.Builder().name("HasName").symbols({"person": Contact})
+           .parameters(lambda p: p.name("name"))
+           .requires(Text.FromFunction(lambda person, name: person.name == name)).create())
+APerson = {"person": Contact}
+Names = Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
+    lambda wt: wt.weight(3).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Cy"))),
+    lambda wt: wt.weight(1).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Di")))).create()
+generated = Generators.Generate(store, Names, Stores.PCG32(42))  # new contacts, named as the cases say, from a seed
+names = [next(generated)["person"].name for _ in range(400)]
+assert set(names) == {"Cy", "Di"} and 250 < names.count("Cy") < 350  # about 3 to 1
 ```
 
 ## Cheat sheet
 
 ```python fragment
-Predicates.Builder().name(n).description(d).symbols({"the": Schema}).requires(spec).forbids(spec).create()  # clone(), update()
+Predicates.OfPredicate.Builder().name(n).symbols({"the": Schema}).parameters(lambda p: p.name("k")).requires(spec).create()
+HasName(person, "alice")                                    # a predicate applied by reference: its symbols, then parameters
 Constraints.OfSet.Builder().predicates(*specs).create()     # specs: predicates, or callables taking a predicate builder
 Constraints.check(predicates)                               # a set, or ValueError with every problem
 Constraints.OfStore(store); Constraints.Builders            # read (and write) predicates; Builders resolves no names
@@ -98,6 +113,10 @@ Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(spec).forbids(spec)
 Predicates.Contains(c.phones, lambda e: e.phone == p)       # Basic's any over entries(c, 'phones'); a hop for the planner
 Predicates.Choice(lambda ch: ch.option(0.35, spec).option(0.65, spec))   # a weighted disjunction
 Predicates.Evaluator(store)(rule, variables)                # evaluates the algebra over a store
+Distributions.OfWeights.Builder().symbols(S).decreasing(lambda wt: wt.weight(3).requires(spec), ...).create()
+Distributions.weight(Predicates.Evaluator(store), weights, match)          # the first holding case's weight, or 0.0
+Distributions.Sample(store, weights, Stores.PCG32(seed))    # the store's matches, drawn by weight
+Generators.Generate(store, weights, Stores.PCG32(seed))     # new objects: a case by weight, built from its equalities
 ```
 
 ## Traps
@@ -108,4 +127,8 @@ Predicates.Evaluator(store)(rule, variables)                # evaluates the alge
 - `Reachable` follows adjacencies both ways: from one contact it reaches its directory, and through it every other
   contact. Validate one object alone with `validate(schema, value)`.
 - A query's variables must not be named like its symbols, and an object variable is bound per match (it has no
-  literal).
+  literal). A predicate's parameters are given as a query's variables, or by applying it; a validator refuses it.
+- A distribution's cases are in decreasing precedence: a match weighs what the first case that holds says, so put the
+  more specific cases first. A generator sets only what a case requires by equality (`x.p == v`, through applied
+  predicates), and refuses a case that what it builds does not satisfy.
+- Sampling and generating take a random source, not a store's: the same seed gives the same draws, in both languages.

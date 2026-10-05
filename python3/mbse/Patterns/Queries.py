@@ -216,9 +216,6 @@ class Scan:
     def extent(self, name: str) -> Any:
         return self.store.extent(name)
 
-    def random(self) -> Stores.Random:
-        return self.store.random()
-
     def select(self, predicate: Any, variables: Mapping[str, Any] | None = None, unknown: bool = False
                ) -> Iterator[Match]:
         return _Plan(self.store, predicate, variables or {}).matches(unknown)

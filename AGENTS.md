@@ -2,9 +2,10 @@
 
 mbse-patterns works over the data of [mbse-schemas](https://github.com/pitaman71/mbse-schemas) with the rules of
 [mbse-expressions](https://github.com/pitaman71/mbse-expressions): predicates (named rules over symbols bound to a
-schema's objects, kept as data beside the schemas), validators that check data against them, and queries that find a
-store's matches for a predicate, lazily, planned from the rule's shape. Patterns (populations of objects), generators and characterizers are planned. Two equivalent
-implementations exist: `python3/` and `typescript5/`.
+schema's objects and parameters, kept as data beside the schemas and used by reference), validators that check data
+against them, queries that find a store's matches for a predicate, lazily, planned from the rule's shape, distributions
+that weigh matches by cases of predicates, and samplers and generators that draw from them, byte-identically from a
+seed. Characterizers are planned. Two equivalent implementations exist: `python3/` and `typescript5/`.
 
 ## Start here
 

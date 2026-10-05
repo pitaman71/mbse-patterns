@@ -2,30 +2,31 @@
   "root": "s0",
   "objects": {
     "s0": {
-      "predicates": [
+      "kind": "set",
+      "arguments": [
         {
-          "predicate": {
+          "argument": {
             "$ref": "s1",
             "$schema": "Patterns.Predicate"
           },
           "index": 0
         },
         {
-          "predicate": {
+          "argument": {
             "$ref": "s2",
             "$schema": "Patterns.Predicate"
           },
           "index": 1
         },
         {
-          "predicate": {
+          "argument": {
             "$ref": "s3",
             "$schema": "Patterns.Predicate"
           },
           "index": 2
         },
         {
-          "predicate": {
+          "argument": {
             "$ref": "s4",
             "$schema": "Patterns.Predicate"
           },
@@ -34,8 +35,9 @@
       ]
     },
     "s1": {
+      "kind": "predicate",
       "name": "Mandatory",
-      "rule": [
+      "arguments": [
         {
           "argument": {
             "$ref": "s5",
@@ -46,6 +48,7 @@
       ]
     },
     "s2": {
+      "kind": "predicate",
       "name": "Forbidden",
       "symbols": [
         {
@@ -57,7 +60,7 @@
           }
         }
       ],
-      "rule": [
+      "arguments": [
         {
           "argument": {
             "$ref": "s6",
@@ -68,6 +71,7 @@
       ]
     },
     "s3": {
+      "kind": "predicate",
       "name": "Possible",
       "symbols": [
         {
@@ -79,7 +83,7 @@
           }
         }
       ],
-      "rule": [
+      "arguments": [
         {
           "argument": {
             "$ref": "s7",
@@ -90,8 +94,9 @@
       ]
     },
     "s4": {
+      "kind": "predicate",
       "name": "Unnumbered",
-      "rule": [
+      "arguments": [
         {
           "argument": {
             "$ref": "s8",

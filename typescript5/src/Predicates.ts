@@ -1,25 +1,33 @@
 /**
  * Predicates: named rules over a store's objects, and the predicate algebra they are written in.
  *
- * A predicate is a named rule over symbols, each bound to an object of a schema; it applies to a *match*, a binding of
- * every symbol to an object of its schema. It is built as schemas are, by a fluent builder finalized by `create()`,
- * `clone()` or `update()`, none of which validates:
+ * A predicate is a rule over symbols, each bound to an object of a schema, and parameters, each a value; it applies to
+ * a *match*, a binding of every symbol to an object of its schema. It is built as schemas are, by a fluent builder
+ * finalized by `create()`, `clone()` or `update()`, none of which validates:
  *
- *     const [c, p] = [E.variable("c"), E.variable("p")];
- *     const HasAPhone = new Predicates.Builder()
- *       .name("HasAPhone")
- *       .symbols({ c: Contact })
- *       .requires(Predicates.Exists((q) => q.symbols({ p: Phone }).requires(
- *         Predicates.Contains(c.phones, (e) => e.phone.eq(p)))))
+ *     const APerson = { person: Person };
+ *     const HasName = new Predicates.OfPredicate.Builder()
+ *       .name("HasName")
+ *       .symbols(APerson)
+ *       .parameters((p) => p.name("name"))
+ *       .requires(E.variable("person").name.eq(E.variable("name")))
  *       .create();
  *
- * `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold; a predicate's rule
- * is their conjunction. A condition is any spec of the algebra: a term below, or a writer. Its free names are the
- * symbols, written as Basic variables (`E.variable("c")`) of the same names. A predicate without symbols is a statement
- * about the whole store.
+ * `.parameters(...)` takes property specs, as an object schema's `.properties(...)` does, each with a name and,
+ * optionally, a type. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold;
+ * the rule is their conjunction. A condition is any spec of the algebra: a term, or a writer. Its free names are the
+ * symbols and parameters. A builder gives the variables it declares by name, so `pred.person` is the variable `person`
+ * once `pred.symbols(APerson)` declares it. A predicate without symbols is a statement about the whole store; one
+ * without a name is written inline, where it is used.
  *
- * The algebra, `DIALECT`, extends mbse-expressions' Basic with terms about a store's data, each a data class with a
- * builder, so a term is built as a predicate is, by a spec (data, or a callable taking the builder):
+ * A predicate is a term of the algebra, `DIALECT`, which extends mbse-expressions' Basic: it binds its symbols and
+ * parameters within its rule (an import, in mbse-expressions' terms). Applying it, `HasName.call(pred.person, "alice")`,
+ * is a term too, `OfApply`, which holds the predicate itself, by reference, and arguments for its symbols and then its
+ * parameters, in order: it holds when the predicate's rule holds with them bound. A predicate used in several places is
+ * one object, and is written once.
+ *
+ * The algebra's other terms, each a data class with a builder, are built as a predicate is, from a spec (data, or a
+ * callable taking the builder):
  *
  * - `Exists(spec)` and `Forall(spec)`: whether some, or every, binding of the builder's `.symbols({...})` to objects of
  *   their schemas satisfies its `.requires(...)` and `.forbids(...)` (several symbols are their cross product);
@@ -28,26 +36,43 @@
  *   entry's other links, and its property values, by name. It is Basic's `any` over `entries(c, 'phones')`;
  * - `Choice((ch) => ch.option(0.35, spec).option(0.65, spec))`: a weighted disjunction, which holds when any of its
  *   options holds; the weights, positive and summing to 1, are how often a generator chooses each option, and what a
- *   characterizer estimates.
+ *   characterizer estimates;
+ * - `OfSet`: predicates, gathered in order.
  *
  * A quantifier ranges over its schema's extent in the store (its `extent` term: what the store's singletons reach).
  * `DIALECT` validates the trees that mix the algebra's terms with Basic's; `new Evaluator(store).run(...)` evaluates
  * them, with the store giving extents, and Basic's three-valued rules for everything else.
  *
- * Predicates are mbse-schemas reference objects with a meta-schema, `Patterns.Predicate`: a symbol's schema is written
- * as a property's type is, by its name or inline, and a predicate is its rule's parent through Basic's relation
- * `Expressions.Arguments`. `Constraints` gathers predicates in sets, and reads and writes them.
+ * Predicates and sets are mbse-schemas reference objects, as every term is, with meta-schemas `Patterns.Predicate` and
+ * `Patterns.Set`: a symbol's schema is written as a property's type is, by its name or inline, and a term is its
+ * arguments' parent through Basic's relation `Expressions.Arguments`. Reading resolves the symbols' schemas by name, so
+ * it goes through a store that resolves them (`Constraints.OfStore`).
  */
 
 import { Domains as BasicDomains, Evaluators as Basic, Expressions as E } from "@mbse/expressions";
 import { Evaluators as F, Terms } from "@mbse/expressions/Framework";
-import { Bindings, Errors, Modules, Schemas, Stores } from "@mbse/schemas/Framework";
+import { Modules, Schemas, Stores } from "@mbse/schemas/Framework";
 import type { PlainMap } from "@mbse/schemas/Framework/Plain";
 import { repr, typeName } from "@mbse/schemas/Framework/Repr";
-import type { OfObject, Visitable } from "@mbse/schemas/Framework/Visitors";
+import type { Visitable } from "@mbse/schemas/Framework/Visitors";
 
 export const PREDICATE = "Patterns.Predicate";
-export const MEMBERS = "Patterns.Members";
+export const SET = "Patterns.Set";
+
+type SymbolsSpec = Record<string, unknown> | ReadonlyMap<string, unknown>;
+
+/** Symbols or parameters by name, each with its schema (or null), in order: a `Map` that is equal to another with the
+ * same names, in the same order, and equal schemas, as Python's dicts are, so that `Terms.same` compares them. */
+export class Symbols extends Map<string, any> {
+  equals(other: unknown): boolean {
+    if (!(other instanceof Symbols) || other.size !== this.size) return false;
+    const theirs = [...other];
+    return [...this].every(([name, schema], i) => {
+      const [otherName, otherSchema] = theirs[i] as [string, any];
+      return name === otherName && (schema === otherSchema || (schema !== null && typeof schema.equals === "function" && schema.equals(otherSchema)));
+    });
+  }
+}
 
 function schemaName(schema: unknown): string {
   const name = typeof schema === "string" ? schema : (schema as { name?: unknown } | null)?.name;
@@ -58,27 +83,77 @@ function schemaName(schema: unknown): string {
 /** The conditions' conjunction, left to right; null if there are none. */
 function conjunction(conditions: unknown[]): Terms.Term | null {
   let rule: Terms.Term | null = null;
-  for (const condition of conditions) rule = rule === null ? condition as Terms.Term : E.operation("and", rule as E.OfAny.Spec, condition as E.OfAny.Spec).data;
+  for (const condition of conditions) {
+    rule = rule === null ? condition as Terms.Term : E.operation("and", rule as E.OfAny.Spec, condition as E.OfAny.Spec).data;
+  }
   return rule;
 }
 
 function negation(spec: unknown): Terms.Term {
-  return E.operation("not", DIALECT.resolve(spec)).data;
+  return E.operation("not", DIALECT.resolve(spec) as E.OfAny.Spec).data;
 }
 
-function entries(symbols: Record<string, unknown> | ReadonlyMap<string, unknown>): [string, unknown][] {
+function entries(symbols: SymbolsSpec): [string, unknown][] {
   return symbols instanceof Map ? [...symbols] : Object.entries(symbols);
+}
+
+// --- Symbols and parameters: value properties, whose schemas are resolved by name while reading ---
+
+const STORES: Stores.Store[] = [new Stores.Catalog() as unknown as Stores.Store];
+
+/** `read()`, with symbols' and parameters' schemas read from a snapshot resolved by name in `store`. */
+export function resolving<T>(store: Stores.Store, read: () => T): T {
+  STORES.push(store);
+  try {
+    return read();
+  } finally {
+    STORES.pop();
+  }
+}
+
+function typed(name: string, schema: unknown): PlainMap {
+  return new Map<string, unknown>(schema === null ? [["name", name]] : [["name", name], ["type", Modules.reference(schema as never)]]) as PlainMap;
+}
+
+const LIST = new Schemas.OfIndexed.Builder().of(Schemas.OfProperty.Schema).create();
+
+/** Symbols by name, each with the schema of the objects it binds, written as an object schema's properties are; none
+ * are not written. */
+export const SYMBOLS = new Terms.ValueProperty(LIST,
+  (symbols) => (symbols as Symbols).size === 0 ? null : [...(symbols as Symbols)].map(([name, schema]) => typed(name, schema)),
+  (plain) => new Symbols((plain as PlainMap[]).map((entry) => [entry.get("name") as string,
+    entry.get("type") === undefined || entry.get("type") === null ? null
+      : Modules.resolve(STORES[STORES.length - 1] as Stores.Store, entry.get("type") as PlainMap)])));
+
+/** Parameters by name, each with its type, or null for a parameter of any type, written as symbols are. */
+export const PARAMETERS = SYMBOLS;
+
+/** The names a builder declares, which it gives as variables: `builder.name`. */
+interface Declaring {
+  declared(): readonly string[];
+}
+
+/** `builder`, giving the variables it declares by name. */
+function declaring<B extends Declaring>(builder: B): B {
+  return new Proxy(builder, {
+    get(target, property, receiver) {
+      if (typeof property === "string" && !(property in target) && target.declared().includes(property)) {
+        return E.variable(property);
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
 }
 
 // --- Terms ---
 
 /** The objects of the schema named `schema` in the store. */
 export class OfExtent extends Terms.Term {
-  /** Builds this kind. */
-  declare static Builder: typeof ExtentBuilder;
   static override KIND = "extent";
   static override ROLE = Terms.APPLICATION;
   static override PROPERTIES = new Map<string, unknown>([["schema", String]]);
+  /** Builds this kind. */
+  declare static Builder: typeof ExtentBuilder;
   declare schema: unknown;
 
   constructor(schema: unknown = null) {
@@ -101,26 +176,26 @@ abstract class Quantified extends Terms.Term {
 
 /** Whether the body holds for every object of the collection, with `name` bound to it. */
 export class OfForall extends Quantified {
+  static override KIND = "forall";
   /** Builds this kind. */
   declare static Builder: typeof ForallBuilder;
-  static override KIND = "forall";
 }
 
 /** Whether the body holds for some object of the collection, with `name` bound to it. */
 export class OfExists extends Quantified {
+  static override KIND = "exists";
   /** Builds this kind. */
   declare static Builder: typeof ExistsBuilder;
-  static override KIND = "exists";
 }
 
 /** An option of a choice: its predicate, and its weight. */
 export class OfOption extends Terms.Term {
-  /** Builds this kind. */
-  declare static Builder: typeof OptionBuilder;
   static override KIND = "option";
   static override ROLE = Terms.APPLICATION;
   static override PROPERTIES = new Map<string, unknown>([["weight", Number]]);
   static override SLOTS = ["body"];
+  /** Builds this kind. */
+  declare static Builder: typeof OptionBuilder;
   declare weight: unknown;
   declare body: any;
 
@@ -139,11 +214,11 @@ export class OfOption extends Terms.Term {
 
 /** A weighted disjunction of options: it holds when any of them holds. */
 export class OfChoice extends Terms.Term {
-  /** Builds this kind. */
-  declare static Builder: typeof ChoiceBuilder;
   static override KIND = "choice";
   static override ROLE = Terms.APPLICATION;
   static override VARIADIC = "options";
+  /** Builds this kind. */
+  declare static Builder: typeof ChoiceBuilder;
   declare options: readonly any[];
 
   constructor(options: readonly unknown[] = []) {
@@ -162,59 +237,155 @@ export class OfChoice extends Terms.Term {
   }
 }
 
+/** A rule over symbols and parameters, which it binds within the rule. `predicate.call(...arguments)` applies it: see
+ * `OfApply`. */
+export class OfPredicate extends Terms.Term {
+  static override KIND = "predicate";
+  static override ROLE = Terms.IMPORT;
+  static override PROPERTIES = new Map<string, unknown>([["name", String], ["description", String]]);
+  static override OPTIONAL = new Set(["name", "description"]);
+  static override VALUES = new Map([["symbols", SYMBOLS], ["parameters", PARAMETERS]]);
+  static override SLOTS = ["rule"];
+  /** Builds this kind. */
+  declare static Builder: typeof PredicateBuilder;
+  declare name: string | null;
+  declare description: string | null;
+  declare rule: any;
+  declare symbols: Symbols; // symbol -> schema
+  declare parameters: Symbols; // parameter -> type, or null
+
+  constructor(name: unknown = null, description: unknown = null, rule: unknown = null, symbols: unknown = null,
+    parameters: unknown = null) {
+    super(name, description, rule, symbols ?? new Symbols(), parameters ?? new Symbols());
+  }
+
+  override binds(): string[] {
+    return [...this.symbols.keys(), ...this.parameters.keys()];
+  }
+
+  override check(): string[] {
+    return [...this.symbols].filter(([, schema]) => !(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null))
+      .map(([symbol]) => `symbol ${repr(symbol)} needs a named reference object schema`);
+  }
+
+  /** The predicate applied to `args`, specs for its symbols and then its parameters, in order. */
+  call(...args: unknown[]): OfApply {
+    return new OfApply(this, args.map((argument) => DIALECT.resolve(argument)));
+  }
+
+  /** A predicate, or what a callable taking a predicate builder builds. */
+  static resolve(spec: unknown): OfPredicate {
+    return Terms.resolve(spec, (v): v is OfPredicate => v instanceof OfPredicate, () => new PredicateBuilder(), "a predicate");
+  }
+}
+
+/** A predicate applied to arguments, for its symbols and then its parameters: whether its rule holds with them bound. */
+export class OfApply extends Terms.Term {
+  static override KIND = "apply";
+  static override ROLE = Terms.APPLICATION;
+  static override SLOTS = ["predicate"];
+  static override VARIADIC = "arguments";
+  declare static Builder: typeof Terms.Builder;
+  declare predicate: any;
+  declare arguments: readonly any[];
+
+  constructor(predicate: unknown = null, args: readonly unknown[] = []) {
+    super(predicate, args);
+  }
+
+  override check(): string[] {
+    if (!(this.predicate instanceof OfPredicate)) {
+      return this.predicate !== null ? ["an application's predicate must be a predicate"] : [];
+    }
+    const wanted = this.predicate.binds().length;
+    if (this.arguments.length !== wanted) return [`${repr(this.predicate.name)} takes ${wanted} arguments, got ${this.arguments.length}`];
+    return [];
+  }
+}
+
+/** Predicates, in order. */
+export class OfSet extends Terms.Term {
+  static override KIND = "set";
+  static override ROLE = Terms.APPLICATION;
+  static override VARIADIC = "predicates";
+  /** Builds this kind. */
+  declare static Builder: typeof SetBuilder;
+  declare predicates: readonly any[];
+
+  constructor(predicates: readonly unknown[] = []) {
+    super(predicates);
+  }
+
+  override check(): string[] {
+    return this.predicates.every((p) => p instanceof OfPredicate) ? [] : ["a set's arguments are predicates"];
+  }
+}
+
 // --- Builders ---
 
 /** Builds a quantifier. DSL: `.symbols({name: schema})`, each schema a named schema or its name, added to those
  * already given, and `.requires(spec)` and `.forbids(spec)`, which add conditions to the body. The first symbol is
  * this quantifier's; each other is a quantifier of the same kind in the body, within which the conditions hold. As a
- * `Visitors.OfObject`, the collection is the `arguments` entry with index 0 and the body the one with index 1. */
-abstract class QuantifiedBuilder extends Terms.Builder {
-  #inner = new Map<string, string>();
-  #conditions: unknown[] = [];
+ * `Visitors.OfObject`, the collection is the `arguments` entry with index 0 and the body the one with index 1. The
+ * builder gives its symbols as variables. */
+abstract class QuantifiedBuilder extends Terms.Builder implements Declaring {
+  [variable: string]: any;
+  private inner = new Map<string, string>();
+  private conditions: unknown[] = [];
 
-  symbols(symbols: Record<string, unknown> | ReadonlyMap<string, unknown>): this {
+  constructor(instance?: Terms.Term) {
+    super(instance);
+    return declaring(this);
+  }
+
+  declared(): string[] {
+    const name = this.state.values.get("name") as string | undefined;
+    return [...(name === undefined ? [] : [name]), ...this.inner.keys()];
+  }
+
+  symbols(symbols: SymbolsSpec): this {
     for (const [name, schema] of entries(symbols)) {
-      if (this.state.values.has("name") || this.#inner.size > 0) this.#inner.set(name, schemaName(schema));
+      if (this.state.values.has("name") || this.inner.size > 0) this.inner.set(name, schemaName(schema));
       else this.set("name", name).argument("collection", new OfExtent(schemaName(schema)));
     }
     return this;
   }
 
   requires(spec: unknown): this {
-    this.#conditions.push(DIALECT.resolve(spec));
+    this.conditions.push(DIALECT.resolve(spec));
     return this;
   }
 
   forbids(spec: unknown): this {
-    this.#conditions.push(negation(spec));
+    this.conditions.push(negation(spec));
     return this;
   }
 
   /** Writes the pending symbols and conditions into the body. */
-  #fold(): void {
-    if (this.#inner.size === 0 && this.#conditions.length === 0) return;
+  private fold(): void {
+    if (this.inner.size === 0 && this.conditions.length === 0) return;
     const existing = (this.state.entries.get("arguments") ?? []).find((entry) => entry.properties.get("index") === 1n)
       ?.links.get("argument");
-    let body = conjunction([...(existing === undefined ? [] : [existing]), ...this.#conditions]);
+    let body = conjunction([...(existing === undefined ? [] : [existing]), ...this.conditions]);
     const kind = this.data as unknown as new (name: unknown, collection: unknown, body: unknown) => Quantified;
-    for (const [name, schema] of [...this.#inner].reverse()) body = new kind(name, new OfExtent(schema), body);
-    this.#inner = new Map();
-    this.#conditions = [];
+    for (const [name, schema] of [...this.inner].reverse()) body = new kind(name, new OfExtent(schema), body);
+    this.inner = new Map();
+    this.conditions = [];
     this.argument("body", body);
   }
 
   override create(): any {
-    this.#fold();
+    this.fold();
     return super.create();
   }
 
   override clone(): any {
-    this.#fold();
+    this.fold();
     return super.clone();
   }
 
   override update(): any {
-    this.#fold();
+    this.fold();
     return super.update();
   }
 }
@@ -258,14 +429,128 @@ class ExtentBuilder extends Terms.Builder {
   }
 }
 
-const KINDS = [OfExtent, OfForall, OfExists, OfChoice, OfOption];
-const BUILDERS = [ExtentBuilder, ForallBuilder, ExistsBuilder, ChoiceBuilder, OptionBuilder];
+/** Builds a predicate. DSL: `.name(str)`, `.description(str)`, `.symbols({name: schema})` and `.parameters(...specs)`,
+ * each added to those already given, in order, and `.requires(spec)` and `.forbids(spec)`, which add conditions to the
+ * rule. The builder gives its symbols and parameters as variables. */
+class PredicateBuilder extends Terms.Builder implements Declaring {
+  static override DATA = OfPredicate;
+  [variable: string]: any;
+  private readonly heldSymbols: Symbols;
+  private readonly heldParameters: Symbols;
+  private conditions: unknown[] = [];
+
+  constructor(instance?: OfPredicate) {
+    super(instance);
+    this.heldSymbols = new Symbols(instance?.symbols ?? []);
+    this.heldParameters = new Symbols(instance?.parameters ?? []);
+    for (const name of ["symbols", "parameters"]) this.state.values.delete(name); // held as data, not in their plain form
+    return declaring(this);
+  }
+
+  declared(): string[] {
+    return [...this.heldSymbols.keys(), ...this.heldParameters.keys()];
+  }
+
+  name(name: string): this {
+    return this.set("name", name);
+  }
+
+  description(text: string): this {
+    return this.set("description", text);
+  }
+
+  /** Symbols by name, each with the schema of the objects it binds, in order; added to those already given. */
+  symbols(symbols: SymbolsSpec): this {
+    for (const [name, schema] of entries(symbols)) this.heldSymbols.set(name, schema);
+    return this;
+  }
+
+  /** Parameters, each a property spec (`(p) => p.name("name")`, with `.of(type)` optionally), in order. */
+  parameters(...specs: Schemas.OfProperty.Spec[]): this {
+    for (const spec of specs) {
+      const built = spec(new Schemas.OfProperty.Builder()).create();
+      this.heldParameters.set(built.name, built.type);
+    }
+    return this;
+  }
+
+  /** Adds a condition: a spec of the algebra whose free names are the symbols and parameters. */
+  requires(spec: unknown): this {
+    this.conditions.push(DIALECT.resolve(spec));
+    return this;
+  }
+
+  /** Adds the condition that `spec` does not hold. */
+  forbids(spec: unknown): this {
+    this.conditions.push(negation(spec));
+    return this;
+  }
+
+  private fold(made: OfPredicate): OfPredicate {
+    made.symbols = new Symbols(this.heldSymbols);
+    made.parameters = new Symbols(this.heldParameters);
+    return made;
+  }
+
+  private rule(): void {
+    if (this.conditions.length === 0) return;
+    const existing = (this.state.entries.get("arguments") ?? [])[0]?.links.get("argument");
+    this.argument("rule", conjunction([...(existing === undefined ? [] : [existing]), ...this.conditions]));
+    this.conditions = [];
+  }
+
+  override create(): OfPredicate {
+    this.rule();
+    return this.fold(super.create());
+  }
+
+  override clone(): OfPredicate {
+    this.rule();
+    return this.fold(super.clone());
+  }
+
+  override update(): OfPredicate {
+    this.rule();
+    return this.fold(super.update());
+  }
+}
+
+/** Builds a set. DSL: `.predicates(...specs)`, each a predicate or a callable taking a predicate builder, added in
+ * order. */
+class SetBuilder extends Terms.Builder {
+  static override DATA = OfSet;
+
+  predicates(...specs: (OfPredicate | ((builder: PredicateBuilder) => PredicateBuilder))[]): this {
+    return this.arguments(...specs.map((spec) => OfPredicate.resolve(spec)));
+  }
+
+  override create(): OfSet {
+    return super.create();
+  }
+
+  override clone(): OfSet {
+    return super.clone();
+  }
+
+  override update(): OfSet {
+    return super.update();
+  }
+}
+
+class ApplyBuilder extends Terms.Builder {
+  static override DATA = OfApply;
+}
+
+const KINDS = [OfExtent, OfForall, OfExists, OfChoice, OfOption, OfPredicate, OfApply, OfSet];
+const BUILDERS = [ExtentBuilder, ForallBuilder, ExistsBuilder, ChoiceBuilder, OptionBuilder, PredicateBuilder, ApplyBuilder, SetBuilder];
+const NAMES = new Map([["predicate", PREDICATE], ["set", SET]]);
 
 /** The predicate algebra: Basic's kinds, and the kinds above. */
 export const DIALECT = new Terms.Declared("Predicates", KINDS as unknown as Terms.TermClass[], {
   domain_of: BasicDomains.of, extends: E.DIALECT,
   builders: new Map(KINDS.map((kind, i) => [kind.KIND, BUILDERS[i] as unknown as typeof Terms.Builder])),
-  schemaNames: new Map(KINDS.map((kind) => [kind.KIND, `Patterns.Of${kind.KIND[0]!.toUpperCase()}${kind.KIND.slice(1)}`])),
+  schemaNames: new Map(KINDS.map((kind) => [kind.KIND,
+    NAMES.get(kind.KIND) ?? `Patterns.Of${kind.KIND[0]!.toUpperCase()}${kind.KIND.slice(1)}`])),
 });
 
 OfExtent.Builder = ExtentBuilder;
@@ -273,6 +558,26 @@ OfForall.Builder = ForallBuilder;
 OfExists.Builder = ExistsBuilder;
 OfChoice.Builder = ChoiceBuilder;
 OfOption.Builder = OptionBuilder;
+OfPredicate.Builder = PredicateBuilder;
+OfApply.Builder = ApplyBuilder;
+OfSet.Builder = SetBuilder;
+
+export namespace OfPredicate {
+  export type Spec = OfPredicate | ((builder: PredicateBuilder) => PredicateBuilder);
+  export type Builder = PredicateBuilder;
+}
+export namespace OfExists {
+  export type Builder = ExistsBuilder;
+}
+export namespace OfForall {
+  export type Builder = ForallBuilder;
+}
+export namespace OfChoice {
+  export type Builder = ChoiceBuilder;
+}
+export namespace OfSet {
+  export type Builder = SetBuilder;
+}
 
 /** Whether some binding of the symbols satisfies the conditions: `Exists((q) => q.symbols({...}).requires(...))`. */
 export function Exists(spec: OfExists | ((builder: ExistsBuilder) => ExistsBuilder)): OfExists {
@@ -310,186 +615,6 @@ export function Contains(adjacency: unknown, condition: (entry: E.Writer) => unk
   return E.quantifier("any", name, collected, DIALECT.resolve(condition(E.variable(name))) as E.OfAny.Spec).data as E.OfQuantifier.Data;
 }
 
-// --- Predicates ---
-
-/** Identities are strings, unique per object, as mbse-schemas keys them. */
-let made = 0;
-
-type Symbols = Map<string, Schemas.OfAny.Data>;
-
-/** A named rule over symbols, each bound to an object of its schema in a match. */
-class PredicateData {
-  readonly #identity = `predicate ${++made}`;
-  name: string | null;
-  description: string | null;
-  symbols: Symbols;
-  rule: Terms.Term | null;
-
-  constructor(fields: { name?: string | null; description?: string | null; symbols?: Symbols; rule?: Terms.Term | null } = {}) {
-    this.name = fields.name ?? null;
-    this.description = fields.description ?? null;
-    this.symbols = fields.symbols ?? new Map();
-    this.rule = fields.rule ?? null;
-  }
-
-  validate(): string[] {
-    const label = `predicate ${repr(this.name)}`;
-    const problems = ([["name", this.name], ["rule", this.rule]] as const).filter(([, value]) => value === null)
-      .map(([what]) => `${label}: a predicate needs a ${what}`);
-    for (const [symbol, schema] of this.symbols) {
-      if (!(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null)) {
-        problems.push(`${label}: symbol ${repr(symbol)} needs a named reference object schema`);
-      }
-    }
-    const rule = this.rule === null ? [] : DIALECT.validate(this.rule, { bound: [...this.symbols.keys()], core: true });
-    return [...problems, ...rule.map((problem) => `${label}: ${problem}`)];
-  }
-
-  identity(): unknown {
-    return this.#identity;
-  }
-
-  schema_name(): string {
-    return PREDICATE;
-  }
-
-  owner(): null {
-    return null;
-  }
-
-  accept(visitor: OfObject): void {
-    Bindings.accept(BINDING, this, visitor);
-  }
-}
-
-/** Builds a predicate, as mbse-schemas' builders build. DSL: `.name(str)`, `.description(str)`,
- * `.symbols({name: schema})`, added to those already given, in order, and `.requires(spec)` and `.forbids(spec)`,
- * which add conditions to the rule. */
-class PredicateBuilder {
-  protected readonly fields: Record<string, unknown> = {};
-
-  constructor(private readonly source?: PredicateData) {
-    if (source !== undefined) Object.assign(this.fields, source, { symbols: new Map(source.symbols) });
-  }
-
-  name(name: string): this {
-    this.fields["name"] = name;
-    return this;
-  }
-
-  description(text: string): this {
-    this.fields["description"] = text;
-    return this;
-  }
-
-  /** Symbols by name, each with the schema of the objects it binds, in order; added to those already given. */
-  symbols(symbols: Record<string, Schemas.OfAny.Data> | ReadonlyMap<string, Schemas.OfAny.Data>): this {
-    this.fields["symbols"] = new Map([...((this.fields["symbols"] as Symbols | undefined) ?? []), ...entries(symbols)]);
-    return this;
-  }
-
-  /** Adds a condition: a spec of the algebra whose free names are the symbols. */
-  requires(spec: unknown): this {
-    const rule = this.fields["rule"];
-    this.fields["rule"] = conjunction([...(rule === undefined || rule === null ? [] : [rule]), DIALECT.resolve(spec)]);
-    return this;
-  }
-
-  /** Adds the condition that `spec` does not hold. */
-  forbids(spec: unknown): this {
-    return this.requires(negation(spec));
-  }
-
-  /** A new predicate. Only valid without a source instance. */
-  create(): PredicateData {
-    if (this.source !== undefined) {
-      throw new Errors.ValueError("create() is only valid without a source instance; use clone() or update()");
-    }
-    return new PredicateData(this.fields);
-  }
-
-  /** A new predicate, leaving the source instance untouched. Only valid with a source instance. */
-  clone(): PredicateData {
-    if (this.source === undefined) throw new Errors.ValueError("clone() is only valid with a source instance");
-    return new PredicateData(this.fields);
-  }
-
-  /** Writes the builder's state into the source instance and returns it. Only valid with a source instance. */
-  update(): PredicateData {
-    if (this.source === undefined) throw new Errors.ValueError("update() is only valid with a source instance");
-    return Object.assign(this.source, this.fields);
-  }
-}
-
-const text = (name: string) => (p: any) => p.name(name).of((t: any) => t.as_native(String));
-
-/** The relation of a set to its predicates, each at its `index` in the set. */
-export const Members = new Schemas.OfRelation.Builder().name(MEMBERS).links("set", "predicate").properties(
-  (p: any) => p.name("index").of((t: any) => t.as_native(BigInt))).create();
-
-export namespace OfPredicate {
-  /** A predicate. */
-  export const Data = PredicateData;
-  export type Data = PredicateData;
-  export const Builder = PredicateBuilder;
-  export type Builder = PredicateBuilder;
-  export type Spec = PredicateData | ((builder: PredicateBuilder) => PredicateBuilder);
-  /** The meta-schema of a predicate. */
-  export const Schema = new Schemas.OfObject.Builder().name(PREDICATE).ref().properties(
-    text("name"), text("description"),
-    (p: any) => p.name("symbols").of((t: any) => t.as_indexed((i: any) => i.of(Schemas.OfProperty.Schema)))).relations(
-    (r: any) => r.name("rule").of(Terms.Arguments).me("parent"),
-    (r: any) => r.name("sets").of(Members).me("predicate")).create();
-
-  export function resolve(spec: unknown): PredicateData {
-    if (spec instanceof PredicateData) return spec;
-    if (typeof spec !== "function") throw new TypeError(`expected a predicate or a callable taking its builder, got ${repr(spec)}`);
-    return (spec as (builder: PredicateBuilder) => PredicateBuilder)(new PredicateBuilder()).create();
-  }
-}
-
-/** `new Predicates.Builder()` builds a predicate: `OfPredicate.Builder`. */
-export const Builder = PredicateBuilder;
-export type Builder = PredicateBuilder;
-
-/** The target of an entry's link, which must be of a kind. */
-export function target(entry: Bindings.Entry, link: string, isKind: (value: unknown) => boolean, what: string): any {
-  const found = entry.links.get(link);
-  if (found === null || found === undefined) throw new Errors.ValueError(`link ${repr(link)} is not set`);
-  if (!isKind(found)) throw new TypeError(`${what} must be ${what === "a rule" ? "an expression" : "a predicate"}`);
-  return found;
-}
-
-function read(predicate: PredicateData): Bindings.State {
-  const values = new Map<string, unknown>();
-  for (const name of ["name", "description"] as const) if (predicate[name] !== null) values.set(name, predicate[name]);
-  if (predicate.symbols.size > 0) {
-    values.set("symbols", [...predicate.symbols].map(([symbol, schema]) =>
-      new Map<string, unknown>([["name", symbol], ["type", Modules.reference(schema)]])));
-  }
-  const rule = predicate.rule === null ? [] : [new Bindings.Entry(new Map([["argument", predicate.rule]]), new Map([["index", 0n]]))];
-  return new Bindings.State(values, new Map([["rule", rule]]));
-}
-
-function make(store: Stores.Store, state: Bindings.State): PredicateData {
-  const rules = state.entries.get("rule") ?? []; // none yet while a snapshot is read: its entries come after its objects
-  if (rules.length > 1) throw new Errors.ValueError(`a predicate has one rule, got ${rules.length}`);
-  const rule = rules.length > 0 ? target(rules[0] as Bindings.Entry, "argument", (v) => DIALECT.accepts(v), "a rule") : null;
-  const symbols: Symbols = new Map(((state.values.get("symbols") as PlainMap[] | undefined) ?? []).map((symbol) =>
-    [symbol.get("name") as string, Modules.resolve(store, symbol.get("type") as PlainMap)]));
-  return new PredicateData({ name: (state.values.get("name") as string | undefined) ?? null,
-    description: (state.values.get("description") as string | undefined) ?? null, symbols, rule });
-}
-
-/** The binding of predicates to their meta-schema, reading symbols' schemas by name in `store`. */
-export function binding(store: Stores.Store): Bindings.Binding {
-  const built = (state: Bindings.State) => make(store, state);
-  return new Bindings.Binding(OfPredicate.Schema, read, built,
-    (instance: PredicateData, state: Bindings.State) => Object.assign(instance, built(state)), { implied: ["sets"] });
-}
-
-const BINDING = binding(new Stores.Catalog() as unknown as Stores.Store); // it only looks names up
-
 // --- Evaluation ---
 
 type Thunk = () => unknown;
@@ -506,8 +631,8 @@ function choiceOf(thunks: Thunk[]): boolean | null {
   return unknown ? null : false;
 }
 
-/** Evaluates predicates over `store`: Basic's rules, with extents from the store. Extents are read once per evaluator,
- * so an evaluator sees the store as it was when first asked. */
+/** Evaluates predicates over `store`: Basic's rules, with extents from the store and applications of predicates.
+ * Extents are read once per evaluator, so an evaluator sees the store as it was when first asked. */
 export class Evaluator {
   readonly interpreter: F.Interpreter;
   readonly #extents = new Map<string, readonly Visitable[]>();
@@ -519,6 +644,7 @@ export class Evaluator {
       ["extent", (_: Thunk[], node: OfExtent) => this.extent(node.schema as string)],
       ["forall", quantifiers.get("all")], ["exists", quantifiers.get("any")],
       ["choice", (thunks: Thunk[]) => choiceOf(thunks)], ["option", (thunks: Thunk[]) => (thunks[0] as Thunk)()],
+      ["apply", (thunks: Thunk[], node: OfApply) => this.apply(thunks, node)],
     ]) as never, { typed: (domain, value) => new BasicDomains.Value(domain, value) });
   }
 
@@ -534,6 +660,12 @@ export class Evaluator {
       this.#extents.set(name, [...this.store.extent(name)]);
     }
     return this.#extents.get(name) as readonly Visitable[];
+  }
+
+  private apply(thunks: Thunk[], node: OfApply): unknown {
+    const predicate = node.predicate as OfPredicate;
+    const values = thunks.slice(1).map((thunk) => thunk());
+    return this.interpreter.run(predicate.rule, Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]])));
   }
 }
 

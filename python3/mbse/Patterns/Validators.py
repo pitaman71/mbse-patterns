@@ -15,7 +15,8 @@ A predicate without symbols is a statement about the whole store, with one match
 evaluated over the store (`Predicates.Evaluator`), whose extents are read once per check.
 
 Structure is mbse-schemas' `Validators.Validate(store)`'s to check: run both. The predicates are checked statically
-(`Constraints.check`) when the validator is made, so that a rule that cannot be right is reported once, not per match.
+(`Constraints.check`) when the validator is made, so that a rule that cannot be right is reported once, not per match;
+a predicate with parameters is refused, since it holds only where it is applied to their values.
 """
 
 from __future__ import annotations
@@ -39,6 +40,9 @@ class Validate:
         if unknown not in UNKNOWN:
             raise ValueError(f"unknown must be 'report', 'ignore' or 'violation', got {unknown!r}")
         self._store, self._predicates, self._unknown = store, Constraints.check(predicates), unknown
+        for predicate in self._predicates.predicates:
+            if predicate.parameters:
+                raise ValueError(f"predicate {predicate.name!r} has parameters: it is checked where it is applied")
 
     def __call__(self, schema: Schemas.OfObject.Data, value: Visitors.Visitable) -> list[str]:
         """The problems of the matches among `value` alone."""

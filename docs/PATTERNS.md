@@ -7,57 +7,67 @@ checkouts, pinned in `siblings.json`). Their design documents,
 [`EXPRESSIONS.md`](https://github.com/pitaman71/mbse-expressions/blob/main/docs/EXPRESSIONS.md), describe the schemas
 and the rules; this document covers what is built from them.
 
-It is planned in three releases, each landed and reviewed before the next:
+It is planned in releases, each landed and reviewed before the next:
 
 | Release | Contents | Status |
 |---|---|---|
 | 0.1 | [Predicates](#predicates), [validators](#validators), [queries](#queries) and the queryable in-memory store | built |
 | 0.2 | [The predicate algebra](#the-predicate-algebra) and [pseudorandom numbers](#pseudorandom-numbers) | built |
-| 0.3 | [Distributions](#distributions), [patterns](#patterns-1) and [generators](#generators) | designed |
-| 0.4 | [Characterizers](#characterizers), which fit patterns from streams of data | designed |
+| 0.3 | [Parameters and application](#parameters-and-application), [distributions](#distributions), [sampling](#pseudorandom-numbers) and [generators](#generators) | built |
+| 0.4 | [Distributions of values](#distributions-of-values), filling what cases leave open | designed |
+| 0.5 | [Characterizers](#characterizers), which fit distributions from streams of data | designed |
 
 ```
 python3/mbse/Patterns/, typescript5/src/
-  Constraints    predicates and sets of them, as data
+  Predicates     predicates, their application, sets, and the algebra they are written in; its evaluator
+  Constraints    reading and writing predicates and distributions as data; check
   Validators     data checked against predicates
   Queries        a rule as a query; the queryable store protocol; Scan, the in-memory implementation
+  Distributions  weights of matches, as weighted cases of predicates; Sample
+  Sampling       values drawn from a random source, specified exactly on its words
+  Generators     new data drawn from a distribution
   Conformance/   the corpus both implementations write byte-identically
 ```
 
 ## Predicates
 
-- **A predicate is a named rule over symbols.** Each symbol is bound to an object of a schema, a named reference
-  object schema as a store registers it; the predicate applies to a *match*, a binding of every symbol to an object of
-  its schema. The rule is a Basic expression (mbse-expressions) whose free names are the symbols: "a contact is an
-  adult" has one symbol, `the`, and the rule `the.age >= 18`; "a contact's phone has a number" has two, `c` and `p`,
-  and the rule `any(e in entries(c, 'phones'), e.phone == p) implies has(p, 'number')`.
-- **Predicates are built as schemas are.** `Predicates.Builder()` (`OfPredicate.Builder`) is fluent: `.name(...)`,
-  `.description(...)`, `.symbols({"the": Contact})` (added in order), and `.requires(spec)` and `.forbids(spec)`, which
-  add conditions (the rule is their conjunction, and `forbids` adds the negation), finalized by `create()`, `clone()`
-  or `update()`, none of which validates. A condition is any spec of the algebra: data, a writer, a term built by its
-  builder, or, in Python, what `Python.Text.FromFunction(lambda the: the.age >= 18)` reads from a function whose
-  parameters are the symbols. Elsewhere the symbols are written as Basic variables of the same names
-  (`c = E.variable("c")`).
-  `OfSet.Builder().predicates(*specs)` gathers predicates in order, each a predicate or a callable taking a predicate
-  builder.
+- **A predicate is a rule over symbols and parameters.** Each symbol is bound to an object of a schema, a named
+  reference object schema as a store registers it; the predicate applies to a *match*, a binding of every symbol to an
+  object of its schema. Each parameter is a value, given where the predicate is applied. The rule is an expression of
+  the predicate algebra (Basic's, mbse-expressions', and the terms below) whose free names are the symbols and
+  parameters: "a contact is an adult" has one symbol, `the`, and the rule `the.age >= 18`; "a person has a name" has a
+  symbol, `person`, a parameter, `name`, and the rule `person.name == name`.
+- **Predicates are built as schemas are.** `OfPredicate.Builder()` is fluent: `.name(...)`, `.description(...)`,
+  `.symbols({"the": Contact})` and `.parameters(lambda p: p.name("name"))` (property specs, as an object schema's
+  properties are, each with an optional type), added in order, and `.requires(spec)` and `.forbids(spec)`, which add
+  conditions (the rule is their conjunction, and `forbids` adds the negation), finalized by `create()`, `clone()` or
+  `update()`, none of which validates. A condition is any spec of the algebra: data, a writer, a term built by its
+  builder, or, in Python, what `Python.Text.FromFunction(lambda person, name: person.name == name)` reads from a
+  function whose parameters are the symbols and parameters. Elsewhere they are written as Basic variables of the same
+  names (`c = E.variable("c")`), which the builder gives once it declares them (`pred.person`). A predicate without a
+  name is written inline, where it is used; one without symbols is a statement about the whole store.
 - **Predicates live beside the schemas.** A schema does not hold its predicates, and mbse-schemas does not depend on
   mbse-expressions; several sets may constrain one schema, and a program chooses which apply.
-- **Predicates are data.** `OfPredicate.Data` and `OfSet.Data` are mbse-schemas reference objects with meta-schemas
-  (`Patterns.Predicate`, `Patterns.Set`). A symbol is written as a property's type is (`Schemas.OfProperty.Schema`): its
-  schema by name when it has one, which every symbol's has, else inline. A predicate is its rule's parent through Basic's
-  own relation `Expressions.Arguments` (index 0), as an operation is its arguments'; a rule may be shared by several
-  predicates and is written once. A set holds its predicates through `Patterns.Members`, by `index`; an entry without
-  one comes after those with one.
+- **Predicates are terms.** `OfPredicate` is a kind of the algebra that binds its symbols and parameters within its
+  rule (mbse-expressions' import role), so a predicate is checked, written and read as any expression is, and may be an
+  argument of another term: that is how it is used by reference ([below](#parameters-and-application)). `OfSet`, a set
+  of predicates in order, is a term too, its predicates its arguments.
+- **Predicates are data.** Every term is an mbse-schemas reference object with a meta-schema (`Patterns.Predicate`,
+  `Patterns.Set`, ...). Symbols and parameters are value properties, written as an object schema's properties are
+  (`Schemas.OfProperty.Schema`): a symbol's schema by name when it has one, which every symbol's has, else inline;
+  none are not written. A term is its arguments' parent through Basic's own relation `Expressions.Arguments`, by
+  index, so a rule, or a predicate, shared by several terms is written once.
 - **Writing needs no store; reading resolves names.** Schemas carry their names (mbse-schemas 0.3), so a predicate
   writes its symbols' schemas by name through any store. Reading one back resolves those names, so it goes through
-  `OfStore(store)`, a store of the predicates' bound classes and Basic's that resolves names in `store`, the user's
-  store of schemas. `Builders` is one that resolves none: it writes any predicate, and reads those whose schemas are
-  inline. `register(store)` registers the meta-schemas, and Basic's, in another store (a `Proxies.OfStore` then holds
-  predicates as proxies).
-- **Predicates are checked when asked.** `validate()` reports a missing name or rule, no symbols, a symbol whose schema
-  is not a named reference object schema, and the rule's problems as a core Basic rule over the symbols
-  ("predicate 'Bad': argument 1: variable 'n' is not bound"); a set's, also two predicates with one name ("defined
-  twice"). `check(predicates)` gives a set and raises `ValueError` with every problem.
+  `Constraints.OfStore(store)`, a store of the terms' bound classes that resolves names in `store`, the user's store of
+  schemas. `Builders` is one that resolves none: it writes any term, and reads those whose schemas are inline.
+  `register(store)` registers the meta-schemas in another store (a `Proxies.OfStore` then holds predicates as
+  proxies). A builder holds the symbols it is given as data; only reading a snapshot resolves names.
+- **Predicates are checked when asked**, as terms are (`DIALECT.validate`, or `predicate.validate()`): a symbol whose
+  schema is not a named reference object schema, a missing rule, and the rule's problems as a core rule over the
+  symbols and parameters ("rule: argument 1: variable 'n' is not bound"). `Constraints.check(predicates)` gives a set,
+  and raises `ValueError` with every predicate's problems, labelled by its name, a predicate without a name, and a name
+  two predicates share ("defined twice").
 
 ## Validators
 
@@ -147,77 +157,113 @@ and forbidden links are statements about the store, so they need both.
   `Forall` stop at the first witness or counterexample. Planning inside quantifiers (a hop within an `Exists`) is an
   open question.
 
+## Parameters and application
+
+Built in 0.3. A predicate is used by reference: its uses hold the predicate itself, so that one predicate, defined once,
+is applied in several places and written once.
+
+- **`HasName(pred.person, "alice")` applies a predicate** (`HasName.call(...)` in TypeScript, where an object is not
+  callable): an `OfApply` term (`Patterns.OfApply`) whose first argument is the predicate itself and whose others are
+  specs for its symbols and then its parameters, in order. It holds when the predicate's rule holds with them bound;
+  `Evaluator(store)` evaluates it so. Its problems are a wrong number of arguments ("'HasName' takes 2 arguments, got
+  1") and a first argument that is not a predicate; a predicate that applies itself is a cycle.
+- **A predicate with parameters is checked where it is applied**: a validator refuses one, since its rule holds only
+  for values of its parameters; a query takes them as variables (`select(HasName, {"name": "alice"})`).
+
 ## Distributions
 
-Planned for 0.3. A pattern says how values are distributed, as data that both implementations sample identically.
+Built in 0.3. A distribution says how a population of matches is weighted, as data both implementations draw from
+identically.
 
-- **Distributions are terms of the same dialect**: `Constant(value)`, `Uniform(low, high)` (ints and floats),
-  `Normal(mean, deviation)`, `Categorical((weight, value), ...)`, `Poisson(rate)` and `Geometric(p)` (for counts), and
-  `Mixture((weight, distribution), ...)`. Parameters are Basic expressions, so one distribution may depend on what is
-  already drawn (`Normal(the.age * 2, 1)`).
-- **A distribution has a domain**, inferred like a Basic expression's: `Normal` gives a float, `Poisson` an int, a
-  `Categorical` its values' domain. A sample outside a property's schema (a float for an `int` property) is refused
-  when the pattern is checked, not when it is sampled.
+- **`OfWeights` weighs the matches of its symbols by cases** (`Patterns.OfWeights`, `Patterns.OfCase`), in the
+  `Distributions` dialect, which extends the algebra:
 
-## Patterns
+  ```python fragment
+  APerson = {"person": Person}
+  Names = (
+      Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
+          lambda wt: wt.weight(10).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "alice"))),
+          lambda wt: wt.weight(5).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "ben"))),
+      )
+      .create()
+  )
+  ```
 
-Planned for 0.3. A pattern is a population of one schema's objects: a predicate, with its weighted choices, and
-distributions for what the predicate leaves open.
+  Each case is a positive weight and a predicate over the distribution's symbols (the same names and schemas, and no
+  parameters), given by reference or built inline by a callable taking a predicate builder.
+- **Cases are in decreasing precedence**: a match weighs what the first case whose predicate holds of it says, and
+  nothing if none does (an unknown result is not holding). `weight(evaluate, weights, match)` gives it.
+- **`Sample(store, weights, random)` draws the store's matches**, with replacement, each with probability proportional
+  to its weight, from the random source given: an iterator, checked when made, which reads the store at the first
+  draw.
+- Other distributions (independent cases, proportions that must sum to 1) are open; `decreasing` names the one there
+  is.
 
-- **A pattern is built as predicates are**: `OfPattern.Builder().name("Contacts").of(Contact)
-  .where("IsSenior").property("age", Normal(72, 5)).relation("phones", Poisson(1.5), Phone)...create()`.
-- **It refers to predicates by name or inline**: `.where("IsSenior")` names a predicate, written as a reference and
-  resolved when read, as a schema is; `.where(lambda p: p.symbols(...).requires(...))` builds one in place, written in
-  place.
-- **Choices weigh the population**: a predicate's `choice` divides it (30% seniors, 70% not), and nested choices give
-  conditional proportions (of seniors, 90% have an email).
-- **Distributions fill what the predicate leaves open**: each property not decided by the chosen alternatives has a
-  distribution, and each adjacency a distribution of its number of entries and of their targets (a pattern of the
-  target schema, or a choice among existing objects of the store).
-- **A pattern is consistent with its predicate.** Where the distributions may give objects the chosen alternatives do
-  not allow, the generator rejects and redraws, up to a bound, and reports the rejection rate. Checking consistency
-  statically, by a solver, is an open question.
-- **Patterns are data**, with meta-schemas like predicates.
+## Distributions of values
+
+Planned for 0.4. A distribution of a property's values, for what a distribution's cases leave open.
+
+- **Distributions of values are terms**: `Constant`, `Uniform` (ints and floats), `Normal`, `Categorical`, `Poisson`
+  and `Geometric` (for counts), and `Mixture`, built by builders as the algebra's terms are
+  (`Normal(lambda n: n.mean(72).deviation(5))`). Parameters are Basic expressions, so one distribution may depend on
+  what is already drawn.
+- **A distribution has a domain**, inferred like a Basic expression's; a sample outside a property's schema is refused
+  when the distribution is checked, not when it is sampled.
+- **Sampling stays exact**: normals by the polar method and Poissons by inversion need `log` and `exp`, which are
+  ported (fdlibm's) to both languages with only IEEE 754's correctly rounded operations, since each language's own may
+  differ in the last place; Box–Muller's `cos` is avoided.
+- **Cases choose, values fill**: a generator sets what the chosen case requires by equality, draws the other
+  properties from their distributions, and redraws, up to a bound, when the case does not hold of what it drew,
+  reporting the rejection rate.
 
 ## Pseudorandom numbers
 
-Built in mbse-schemas 0.4; sampling, in mbse-patterns 0.3, is planned. Generated data is byte-identical in Python and
-TypeScript from the same seed, as all output of the two implementations is, and the caller chooses the source.
+`Stores.Random` and `Stores.PCG32` are mbse-schemas'; sampling is mbse-patterns' (0.3). Generated data is byte-identical in Python and TypeScript
+from the same seed, as all output of the two implementations is, and the caller chooses the source.
 
-- **`Stores.Random` is a protocol, and a store is equipped with one when it is made**:
-  `Proxies.OfStore(random=Stores.PCG32(42))`, `Bindings.OfStore(builders, relations, random=...)`. `store.random()`
-  gives it, and raises `LookupError` for a store made without one. The store is the root object, so its environment
-  (randomness, as a clock would be) lives there.
+- **A random source is given to whatever draws from it**: `Sample(store, weights, Stores.PCG32(42))`,
+  `Generate(store, weights, Stores.PCG32(42))`. A store holds none: it is data access alone, and a caller chooses a seed
+  per draw (mbse-schemas 0.5; in 0.4, a store was equipped with one when made).
 - **The protocol is small**: `next_u32()`, the next 32 random bits as an int, and `split(key)`, an independent stream
-  determined by the source's seed and `key` alone, not by what was drawn before, so that each object and property draws
-  from its own stream and adding a property to a pattern does not change the values drawn for the others.
+  determined by the source's seed and `key` alone, not by what was drawn before, so that each step of a generator draws
+  from its own stream.
 - **`Stores.PCG32(seed, sequence)` is the reference source**, specified exactly (PCG-XSH-RR, 64-bit state, 32-bit
   output) and implemented in both languages; `split(key)` seeds a new PCG32 from FNV-1a 64 of the key's UTF-8 bytes,
   starting from the offset basis XOR the seed, with the same sequence. Any other source meets the protocol, at the cost
   of byte-identity.
-- **Sampling is specified on top of the protocol**, in mbse-patterns, so any source gives the same samples from the
-  same words: a bounded integer by rejection, a float from 53 bits, a normal by Box–Muller, a Poisson by inversion. A
-  conformance corpus of generated data checks that both implementations produce the same bytes.
+- **Sampling is specified on top of the protocol** (`Sampling`), so any source gives the same samples from the same
+  words: `uniform(random)`, a float from 53 bits, `(a >> 5) * 2**26 + (b >> 6)` over `2**53`; `below(random, n)`, an
+  int in [0, n) by rejection over as many words as `n - 1` needs bits; and `weighted(random, weights)`, an index whose
+  running sum of weights, from the first, first exceeds `uniform(random) * total`. The `generated` case of the
+  conformance corpus checks that both implementations produce the same bytes.
 
 ## Generators
 
-Planned for 0.3. `Generate(store, pattern, count)` builds objects with the store's builders, drawing from
-`store.random()`, split by object and property; generated data is ordinary data, validated, queried and serialized. A
-generator is a stream: it builds one object per step, with its value objects and the entries the pattern gives it,
-and links what it builds to the store's data as the pattern says (e.g. listed in a singleton directory), or leaves it
-transient.
+Built in 0.3. `Generators.Generate(store, weights, random)` streams matches of new objects, built with the
+store's builders. Generated data is ordinary data: transient until linked to the store's data, then validated, queried
+and serialized as any other.
+
+- **Each step draws from its own stream**, `random.split(str(step))`, so a step's objects do not depend on how many
+  were drawn before it, and one seed gives the same data in both languages.
+- **A step chooses a case by weight, and builds what it requires by equality**: for each symbol, an object of its
+  schema whose properties are those the case's predicate sets with a conjunct `x.p == v` (or `v == x.p`), `v` a
+  literal, following conjunctions and applications of predicates, whose symbols and parameters are bound to their
+  arguments (`settings(predicate)` gives them).
+- **What it builds must weigh what the case says**: the case must be the first whose predicate holds of the objects,
+  or the generator raises `ValueError` ("case 1 cannot be generated from its equalities: what they build satisfies case
+  0"). Drawing the properties a case leaves open is [planned](#distributions-of-values).
 
 ## Characterizers
 
-Planned for 0.4. A characterizer reads a stream of objects of one schema and fits a pattern to them: the proportion
+Planned for 0.5. A characterizer reads a stream of objects of one schema and fits a distribution to them: the proportion
 satisfying each predicate of a set, and, per part, each property's distribution and each adjacency's number of
 entries, from a family the caller chooses (or the best of several by a criterion, such as the log-likelihood).
 
 - **One pass, bounded memory.** Estimators are online: counts and proportions, Welford's mean and variance, quantile
   sketches, reservoir samples for categoricals with too many values. A characterizer can read a store's extent, a
   query's matches, or any stream of objects.
-- **Generators and characterizers round-trip.** Generating from a pattern and characterizing the result gives the
-  pattern back within sampling error; this is how both are tested, with seeds fixed and tolerances stated.
+- **Generators and characterizers round-trip.** Generating from a distribution and characterizing the result gives the
+  distribution back within sampling error; this is how both are tested, with seeds fixed and tolerances stated.
 
 ## Open questions
 
@@ -228,7 +274,11 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - Asynchronous queries (`AsyncIterator`) for stores whose reads are asynchronous, in TypeScript especially.
 - Predicates over value objects: a match binds reference objects, from extents; a rule about a value object is
   written today as a rule about its owner.
-- Checking statically that a pattern's distributions satisfy its predicates (a solver), rather than by rejection.
+- Checking statically that what a generator draws satisfies the chosen case (a solver), rather than by rejection.
+- Generating related objects: a case that requires links (`Exists`, `Contains`) between its symbols, or to objects the
+  store already holds, and distributions of an adjacency's number of entries.
+- Other ways to combine cases than decreasing precedence: independent cases whose weights multiply, and proportions
+  that must sum to 1.
 - Planning inside quantifiers, and partial evaluation of rules over the algebra (Basic's reducer does not take its
   terms).
 - More shapes for the planner: hops in the other direction (from `b` to `a` through `b`'s own adjacency), equality on
@@ -246,10 +296,11 @@ entries, from a family the caller chooses (or the best of several by a criterion
   store; reading resolves the names in one.
 - Queries are this package's, not an extension in mbse-expressions; mbse-expressions keeps the rules.
 - A query streams lazily over the store's data first; standing queries come later.
-- A pattern is layered: weights over predicates, and distributions within each part.
+- A population is layered: weights over predicates (cases), and distributions of values within each case.
 - Generated data is byte-identical across implementations from a seed.
-- A store is equipped with a random source when it is made (`Stores.Random`, in mbse-schemas); PCG32 is the reference
-  source, and streams split by key from the seed, not from what was drawn.
+- A random source is given to whatever draws from it (`Stores.Random`, in mbse-schemas), not held by a store, which
+  is data access alone; PCG32 is the reference source, and streams split by key from the seed, not from what was
+  drawn.
 - Mandatory, possible and forbidden links are predicates: quantifiers over extents (`Exists`, `Forall`) are terms of a
   `Predicates` dialect extending Basic, links are tested by `Contains` (Basic's `any` over `entries`), and "possible"
   is a weighted disjunction (`Choice`) of the alternatives, which validation reads as their disjunction and generators
@@ -257,7 +308,15 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - The algebra follows the builder precedent of mbse-schemas: each term is a data class with a builder, built from a
   spec (data, or a callable taking the builder), and a predicate's conditions are added by `.requires(...)` and
   `.forbids(...)`; there are no writer functions of the package's own.
-- A pattern is a predicate with weighted choices, plus distributions; it refers to predicates by name or inline.
+- A distribution is weighted cases of predicates (`Distributions.OfWeights`), in decreasing precedence; its cases use
+  predicates by reference or inline, never by name.
+- A predicate is used by reference: it is a term of the algebra, and applying it (`HasName(person, "alice")`) is a term
+  that holds the predicate itself as its first argument, so a predicate used in several places is one object, written
+  once. Predicates take parameters, as property specs, bound by applying them.
+- A builder gives the variables it declares by name (`pred.person`), as the user's example writes them.
+- Sampling is specified on the random source's words alone, with integer arithmetic and correctly rounded IEEE 754
+  operations, so that both languages draw the same values; transcendental functions are ported rather than taken
+  from each language's library.
 - A predicate links its rule through `Expressions.Arguments`, whose argument end Basic's kinds already declare
   (`used_by`), so mbse-schemas' validation accepts the link; a relation of this package's would need Basic's kinds to
   declare it.

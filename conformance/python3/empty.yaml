@@ -1,3 +1,4 @@
 root: s0
 objects:
-  s0: {}
+  s0:
+    kind: set

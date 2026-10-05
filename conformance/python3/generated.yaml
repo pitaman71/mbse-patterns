@@ -1,0 +1,112 @@
+root: s0
+objects:
+  s0:
+    contacts:
+    - contact:
+        $ref: s1
+        $schema: Contact
+    - contact:
+        $ref: s2
+        $schema: Contact
+    - contact:
+        $ref: s3
+        $schema: Contact
+    - contact:
+        $ref: s4
+        $schema: Contact
+    - contact:
+        $ref: s5
+        $schema: Contact
+    - contact:
+        $ref: s6
+        $schema: Contact
+    - contact:
+        $ref: s7
+        $schema: Contact
+    - contact:
+        $ref: s8
+        $schema: Contact
+    - contact:
+        $ref: s9
+        $schema: Contact
+    - contact:
+        $ref: s10
+        $schema: Contact
+    - contact:
+        $ref: s11
+        $schema: Contact
+    - contact:
+        $ref: s12
+        $schema: Contact
+  s1:
+    name: chermon
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s2:
+    name: davi
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s3:
+    name: chermon
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s4:
+    name: davi
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s5:
+    name: alice
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s6:
+    name: ben
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s7:
+    name: alice
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s8:
+    name: davi
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s9:
+    name: alice
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s10:
+    name: ben
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s11:
+    name: chermon
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory
+  s12:
+    name: chermon
+    directories:
+    - directory:
+        $ref: s0
+        $schema: Directory

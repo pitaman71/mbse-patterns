@@ -12,7 +12,7 @@ from mbse.Expressions.Dialects.Python import Text
 from mbse.Patterns import Predicates, Queries, Validators
 
 IsAnAdult = (
-    Predicates.Builder()
+    Predicates.OfPredicate.Builder()
     .name("IsAnAdult")
     .description("18 or older")
     .symbols({"the": Contact})
@@ -21,7 +21,7 @@ IsAnAdult = (
 )
 c, p = E.variable("c"), E.variable("p")
 HasAPhone = (
-    Predicates.Builder()
+    Predicates.OfPredicate.Builder()
     .name("HasAPhone")
     .symbols({"c": Contact})
     .requires(Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(
@@ -36,14 +36,14 @@ Queries.select(store, IsAnAdult)                                             # a
 import { Expressions as E } from "@mbse/expressions";
 import { Predicates, Queries, Validators } from "@mbse/patterns";
 
-const IsAnAdult = new Predicates.Builder()
+const IsAnAdult = new Predicates.OfPredicate.Builder()
   .name("IsAnAdult")
   .description("18 or older")
   .symbols({ the: Contact })
   .requires(E.variable("the").age.ge(18n))
   .create();
 const [c, p] = [E.variable("c"), E.variable("p")];
-const HasAPhone = new Predicates.Builder()
+const HasAPhone = new Predicates.OfPredicate.Builder()
   .name("HasAPhone")
   .symbols({ c: Contact })
   .requires(Predicates.Exists((q) => q.symbols({ p: Phone }).requires(
@@ -53,9 +53,10 @@ Validators.Validate(store, [IsAnAdult, HasAPhone]).Reachable(Contact, ann);
 Queries.select(store, IsAnAdult);
 ```
 
-Patterns (populations of objects: weights over predicates, with distributions of properties and relations),
-generators of data from patterns, byte-identical in both languages from a seed, and characterizers that fit patterns
-to data are designed ([docs/PATTERNS.md](docs/PATTERNS.md)) for the next releases.
+Distributions weigh a population of matches by cases of predicates, each used by reference or inline; a sampler draws
+a store's matches by weight, and a generator builds new data, byte-identical in both languages from a seed.
+Distributions of property values and characterizers that fit distributions to data are designed
+([docs/PATTERNS.md](docs/PATTERNS.md)) for the next releases.
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
 (`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a rule from a

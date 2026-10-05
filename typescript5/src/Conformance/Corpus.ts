@@ -8,22 +8,27 @@
  */
 
 import { Expressions as E } from "@mbse/expressions";
-import { Proxies, Schemas as S, type Stores } from "@mbse/schemas/Framework";
+import { Proxies, Schemas as S, Stores } from "@mbse/schemas/Framework";
 import type { Visitable } from "@mbse/schemas/Framework/Visitors";
 
 import * as C from "../Constraints.js";
+import * as D from "../Distributions.js";
+import * as G from "../Generators.js";
 import * as P from "../Predicates.js";
 
-export const CASES = ["predicates", "empty", "algebra"];
+export const CASES = ["predicates", "empty", "algebra", "weights", "generated"];
 
 export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Stores.Store]> {
   const text = (name: string) => (p: any) => p.name(name).of((t: any) => t.as_native(String));
   const Phones = new S.OfRelation.Builder().name("Phones").links("owner", "phone").unique("owner").create(); // a phone has one owner
   const Phone = new S.OfObject.Builder().name("Phone").ref().properties(text("number")).relations(
     (r: any) => r.name("owners").of(Phones).me("phone")).create();
+  const Listed = new S.OfRelation.Builder().name("Listed").links("directory", "contact").create();
   const Contact = new S.OfObject.Builder().name("Contact").ref().properties(
     text("name"), (p: any) => p.name("age").of((t: any) => t.as_native(BigInt))).relations(
-    (r: any) => r.name("phones").of(Phones).me("owner")).create();
+    (r: any) => r.name("phones").of(Phones).me("owner"), (r: any) => r.name("directories").of(Listed).me("contact")).create();
+  const Directory = new S.OfObject.Builder().name("Directory").ref().relations(
+    (r: any) => r.name("contacts").of(Listed).me("directory")).create();
   const schemas = new Proxies.OfStore();
   for (const schema of [Contact, Phone, Phones]) schemas.register(schema);
   const store = new C.OfStore(schemas);
@@ -33,7 +38,7 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
   const adult = the.age.ge(18n).data;
   const hasPhone = E.operation("count", E.operation("entries", the, "phones")).ge(1n).data;
   const predicates = new C.OfSet.Builder().predicates(
-    new P.Builder().name("IsAnAdult").description("18 or older").symbols({ the: Contact }).requires(adult).create(),
+    new P.OfPredicate.Builder().name("IsAnAdult").description("18 or older").symbols({ the: Contact }).requires(adult).create(),
     (b) => b.name("AdultsHavePhones").symbols({ the: Contact }).requires(E.operation("implies", adult, hasPhone)),
     (b) => b.name("OwnsNumbered").symbols({ c: Contact, p: Phone }).requires(
       E.quantifier("any", "e", E.operation("entries", c, "phones"), E.variable("e").phone.eq(p))
@@ -54,9 +59,32 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
       .requires(P.Contains(c.phones, (e) => e.phone.eq(p))).forbids(p.has("number")))),
   ).create();
 
+  // --- weights: weighted cases in decreasing precedence, inline predicates applying one predicate, written once ---
+  const APerson = { person: Contact };
+  const HasName = new P.OfPredicate.Builder().name("HasName").symbols(APerson).parameters((p) => p.name("name")).requires(
+    E.variable("person").name.eq(E.variable("name"))).create();
+  const weights = new D.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
+    (wt) => wt.weight(10).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "alice"))),
+    (wt) => wt.weight(5).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "ben"))),
+    (wt) => wt.weight(15).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "chermon"))),
+    (wt) => wt.weight(7).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "davi"))),
+  ).create();
+
+  // --- generated: twelve contacts generated from the weights, from the seed 42, listed in a directory ---
+  const book: any = new Proxies.OfStore();
+  for (const schema of [Contact, Phone, Phones, Listed, Directory]) book.register(schema);
+  const directory = book.Directory().create(); // not a singleton: reading a snapshot back makes another
+  const generated = G.Generate(book, weights, new Stores.PCG32(42n));
+  for (let i = 0; i < 12; i++) {
+    const contact = generated.next().value!["person"];
+    book.Directory(directory).contacts((e: any) => e.contact(contact)).update();
+  }
+
   return new Map([
     ["predicates", [C.OfSet.Schema, predicates, store] as const],
     ["empty", [C.OfSet.Schema, empty, store] as const],
     ["algebra", [C.OfSet.Schema, algebra, store] as const],
+    ["weights", [D.OfWeights.Schema, weights, store] as const],
+    ["generated", [Directory, directory, book] as const],
   ]);
 }

@@ -1,6 +1,6 @@
 ---
 name: mbse-patterns
-description: Write predicates (named rules over symbols bound to mbse-schemas objects, such as "every adult contact has a phone" or "a contact's phone has a number") as data beside the schemas, validate data against them with three-valued results, and query a store for their matches, lazily and planned from the rule's shape, in Python or TypeScript. Use when an interface or model has rules its data must satisfy (MBSE/SysML constraints, interface control documents, data-quality rules), when selecting objects of an mbse-schemas store by a condition, possibly relating several objects, or when writing code that imports mbse.Patterns or @mbse/patterns.
+description: Write predicates (named rules over symbols bound to mbse-schemas objects, such as "every adult contact has a phone" or "a contact's phone has a number") as data beside the schemas, validate data against them with three-valued results, and query a store for their matches, lazily and planned from the rule's shape, in Python or TypeScript. Use when an interface or model has rules its data must satisfy (MBSE/SysML constraints, interface control documents, data-quality rules), when selecting objects of an mbse-schemas store by a condition, possibly relating several objects, when weighting a population by predicates and drawing samples or generating reproducible pseudorandom test data from it, or when writing code that imports mbse.Patterns or @mbse/patterns.
 ---
 
 # mbse-patterns
@@ -12,7 +12,7 @@ predicate algebra, each built fluently too:
 
 ```python fragment
 IsAnAdult = (
-    Predicates.Builder()
+    Predicates.OfPredicate.Builder()
     .name("IsAnAdult")
     .description("18 or older")
     .symbols({"the": Contact})
@@ -21,7 +21,7 @@ IsAnAdult = (
 )
 c, p = E.variable("c"), E.variable("p")
 HasAPhone = (
-    Predicates.Builder()
+    Predicates.OfPredicate.Builder()
     .name("HasAPhone")
     .symbols({"c": Contact})
     .requires(Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(
@@ -30,7 +30,9 @@ HasAPhone = (
 )
 ```
 
-`Validators` checks data against predicates; `Queries` finds a store's matches for a predicate. Python imports
+`Validators` checks data against predicates; `Queries` finds a store's matches for a predicate. `Distributions` weigh
+matches by cases of predicates; `Distributions.Sample` draws from a store's data and `Generators.Generate` builds new
+data, both from a random source the caller gives, byte-identically in both languages from a seed. Python imports
 `mbse.Patterns`, TypeScript `@mbse/patterns`.
 
 ## When to use it
@@ -46,8 +48,8 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
 ## Rules that prevent most mistakes
 
 1. **A symbol's schema is a named reference object schema**, as a store registers it. The rule's free names are the
-   symbols, written as Basic variables of the same names (`c = E.variable("c")`), and, in a query, its variables; only
-   Basic's core vocabulary is allowed. `Constraints.check(...)` and every validator and query reject anything else up
+   symbols and parameters, written as Basic variables of the same names (`c = E.variable("c")`, or `pred.c` from the
+   builder that declares `c`), and, in a query, its variables; only Basic's core vocabulary is allowed. `Constraints.check(...)` and every validator and query reject anything else up
    front.
 2. **A predicate applies to every match.** With several symbols, the matches are the cross product of their objects;
    the rule says which combinations matter (e.g. that a phone is one of a contact's).
@@ -63,9 +65,16 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
    `explain` shows the plan. Relations' `unique` clauses tell it when such a hop gives at most one object.
 7. **Reading predicates resolves their schemas by name**: read through `Constraints.OfStore(store)`, with the store that
    registers them. Writing needs no store.
-8. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`, and
-   `Contains` calls its condition with a variable: `(e) => e.phone.eq(p)`), and a validator's options are an object
-   (`{ unknown: "ignore" }`).
+8. **A predicate is used by reference.** One with parameters (`.parameters(lambda p: p.name("name"))`) is applied:
+   `HasName(pred.person, "alice")` holds the predicate itself and binds its symbols, then its parameters, in order.
+   Shared predicates are written once. A validator refuses a predicate with parameters; a query takes them as
+   variables.
+9. **A distribution's cases are in decreasing precedence**: a match weighs what the first case whose predicate holds
+   says. A generator chooses a case by weight and sets only what its predicate requires by equality, then checks that
+   the case is the first to hold; sampling and generating take a random source (`Stores.PCG32(seed)`).
+10. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`, and
+   `Contains` calls its condition with a variable: `(e) => e.phone.eq(p)`), a predicate is applied with
+   `.call(...)`, and a validator's options are an object (`{ unknown: "ignore" }`).
 
 ## Load the reference for your task
 

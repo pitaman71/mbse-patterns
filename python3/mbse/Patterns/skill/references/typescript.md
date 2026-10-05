@@ -1,6 +1,7 @@
 # mbse-patterns in TypeScript
 
-Install `@mbse/patterns`, then import `Predicates`, `Constraints`, `Validators` and `Queries` from it, the rules' writers from
+Install `@mbse/patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions` and
+`Generators` from it, the rules' writers from
 `@mbse/expressions`, and the data's framework from `@mbse/schemas/Framework`. Everything matches Python, with the
 differences below.
 
@@ -10,8 +11,8 @@ The same address book as in Python.
 
 ```typescript
 import { Expressions as E } from "@mbse/expressions";
-import { Constraints, Predicates, Queries, Validators } from "@mbse/patterns";
-import { JSON as SchemaJSON, Proxies, Schemas as S } from "@mbse/schemas/Framework";
+import { Constraints, Distributions, Generators, Predicates, Queries, Validators } from "@mbse/patterns";
+import { JSON as SchemaJSON, Proxies, Schemas as S, Stores } from "@mbse/schemas/Framework";
 
 const native = (name: string, kind: unknown) => (p: any) => p.name(name).of((t: any) => t.as_native(kind));
 
@@ -34,19 +35,19 @@ const same = (a: Iterable<unknown>, b: unknown[]) => JSON.stringify([...a]) === 
 // Predicates: named rules over symbols, built fluently, with conditions written with writers; the symbols are written
 // as variables of the same names.
 const [the, c, p] = [E.variable("the"), E.variable("c"), E.variable("p")];
-const IsAnAdult = new Predicates.Builder().name("IsAnAdult").description("18 or older")
+const IsAnAdult = new Predicates.OfPredicate.Builder().name("IsAnAdult").description("18 or older")
   .symbols({ the: Contact }).requires(the.age.ge(18n)).create();
 const owns = Predicates.Contains(c.phones, (e) => e.phone.eq(p)); // p is one of c's phones
-const OwnedNumbered = new Predicates.Builder().name("OwnedNumbered").symbols({ c: Contact, p: Phone })
+const OwnedNumbered = new Predicates.OfPredicate.Builder().name("OwnedNumbered").symbols({ c: Contact, p: Phone })
   .requires(E.operation("implies", owns, p.has("number"))).create();
 const rules = Constraints.check([IsAnAdult, OwnedNumbered]);
 
 // The algebra: quantifiers over a schema's objects, built as predicates are. Mandatory, forbidden and possible links.
 const HasAPhone = Predicates.Exists((q) => q.symbols({ p: Phone }).requires(owns));
-const EveryoneHasAPhone = new Predicates.Builder().name("EveryoneHasAPhone") // no symbols: a statement about the store
+const EveryoneHasAPhone = new Predicates.OfPredicate.Builder().name("EveryoneHasAPhone") // no symbols: a statement about the store
   .requires(Predicates.Forall((q) => q.symbols({ c: Contact }).requires(HasAPhone))).create();
-const Phoneless = new Predicates.Builder().name("Phoneless").symbols({ c: Contact }).forbids(HasAPhone).create();
-const Sometimes = new Predicates.Builder().name("Sometimes").symbols({ c: Contact }).requires(Predicates.Choice(
+const Phoneless = new Predicates.OfPredicate.Builder().name("Phoneless").symbols({ c: Contact }).forbids(HasAPhone).create();
+const Sometimes = new Predicates.OfPredicate.Builder().name("Sometimes").symbols({ c: Contact }).requires(Predicates.Choice(
   (ch) => ch.option(0.35, HasAPhone).option(0.65, E.operation("not", HasAPhone)))).create();
 
 // The store's data is what its singleton directory reaches.
@@ -68,17 +69,30 @@ check(same(links(Contact, kid), ["the store: 'EveryoneHasAPhone' does not hold"]
 
 // Predicates are data: written by their symbols' schema names, read back through a store that resolves them.
 const text = SchemaJSON.ToJSON(Constraints.Builders).Reachable(Constraints.OfSet.Schema, rules);
-const copy = SchemaJSON.FromJSON(new Constraints.OfStore(store)).Reachable(Constraints.OfSet.Schema, text) as Constraints.OfSet.Data;
-check(same(copy.predicates.map((x) => x.name), ["IsAnAdult", "OwnedNumbered"]) && copy.predicates[0]!.symbols.get("the") === Contact, "copy");
+const copy = SchemaJSON.FromJSON(new Constraints.OfStore(store)).Reachable(Constraints.OfSet.Schema, text) as Constraints.OfSet;
+check(same(copy.predicates.map((x: Predicates.OfPredicate) => x.name), ["IsAnAdult", "OwnedNumbered"]) && copy.predicates[0]!.symbols.get("the") === Contact, "copy");
 
 // Queries: matches stream lazily, planned from the rule's shape.
 const query = new Queries.Scan(store);
 check([...query.select(IsAnAdult)].map((m) => m["the"]).every((x) => x === ann), "adults");
-const numbered = new Predicates.Builder().name("Numbered").symbols({ c: Contact, p: Phone })
+const numbered = new Predicates.OfPredicate.Builder().name("Numbered").symbols({ c: Contact, p: Phone })
   .requires(owns).requires(p.has("number")).create();
 check(same(query.explain(numbered), ["c: scan Contact", "p: c.phones to phone, any number, then 2 tests"]), "plan");
 check(same([...query.select(numbered)].map((m: any) => [m.c.name, m.p.number]), [["Ann", "555-0100"]]), "numbered");
 check([...query.select(IsAnAdult, null, true)].length === 2, "with unknown");
+
+// Parameters: a predicate applied by reference, to a symbol and a value. Distributions weigh cases of predicates, given
+// by reference or inline, in decreasing precedence; a generator builds new data from them, from the store's seed.
+const HasName = new Predicates.OfPredicate.Builder().name("HasName").symbols({ person: Contact })
+  .parameters((x) => x.name("name")).requires(E.variable("person").name.eq(E.variable("name"))).create();
+const APerson = { person: Contact };
+const Names = new Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
+  (wt) => wt.weight(3).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Cy"))),
+  (wt) => wt.weight(1).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Di")))).create();
+const generated = Generators.Generate(store, Names, new Stores.PCG32(42n)); // new contacts, named as the cases say
+const names = Array.from({ length: 400 }, () => (generated.next().value as any).person.name);
+const cy = names.filter((n) => n === "Cy").length;
+check(new Set(names).size === 2 && cy > 250 && cy < 350, "generated"); // about 3 to 1
 ```
 
 ## Differences from Python
@@ -89,7 +103,12 @@ check([...query.select(IsAnAdult, null, true)].length === 2, "with unknown");
   the condition is written with writers too: `(e) => e.phone.eq(p)`.
 - `.symbols(...)` takes a record or a `Map`, and a predicate's `symbols` is a `Map`; a match is a record.
 - A validator's options are an object: `Validate(store, rules, { unknown: "ignore" })`.
-- Builders are made with `new`: `new Predicates.Builder()`; the algebra's evaluator is
+- Builders are made with `new`: `new Predicates.OfPredicate.Builder()`; the algebra's evaluator is
   `new Predicates.Evaluator(store).run(rule, variables)`.
+- A predicate is applied with `HasName.call(person, "alice")`, since an object is not callable; Python also calls it
+  directly, `HasName(person, "alice")`. A builder gives a name it has not declared as `undefined`, where Python raises
+  `AttributeError`.
+- Seeds and random words are `bigint`s (`new Stores.PCG32(42n)`), and weights are numbers: there is no `int` weight
+  to refuse.
 - `select(predicate, variables, unknown)` takes `unknown` by position (`null` for no variables), and returns a
   generator: `next()` gives `{ value, done }`.
