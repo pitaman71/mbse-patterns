@@ -51,7 +51,7 @@ objects:
     arguments:
     - argument:
         $ref: s7
-        $schema: Patterns.OfChoice
+        $schema: Patterns.OfChoices
       index: 0
   s4:
     kind: predicate
@@ -82,26 +82,30 @@ objects:
         $schema: Patterns.OfExists
       index: 0
   s7:
-    kind: choice
+    kind: choices
     arguments:
     - argument:
         $ref: s11
-        $schema: Patterns.OfOption
+        $schema: Patterns.OfCount
       index: 0
     - argument:
         $ref: s12
-        $schema: Patterns.OfOption
+        $schema: Patterns.OfArm
       index: 1
+    - argument:
+        $ref: s13
+        $schema: Patterns.OfArm
+      index: 2
   s8:
     kind: exists
     name: c
     arguments:
     - argument:
-        $ref: s13
+        $ref: s14
         $schema: Patterns.OfExtent
       index: 0
     - argument:
-        $ref: s14
+        $ref: s15
         $schema: Patterns.OfExists
       index: 1
   s9:
@@ -112,86 +116,71 @@ objects:
     name: p
     arguments:
     - argument:
-        $ref: s15
+        $ref: s16
         $schema: Patterns.OfExtent
       index: 0
     - argument:
-        $ref: s16
+        $ref: s17
         $schema: Expressions.OfQuantifier
       index: 1
   s11:
-    kind: option
+    kind: count
+    name: c
+    arguments:
+    - argument:
+        $ref: s18
+        $schema: Expressions.OfOperation
+      index: 0
+  s12:
+    kind: arm
     weight: 0.35
     arguments:
     - argument:
         $ref: s10
         $schema: Patterns.OfExists
       index: 0
-  s12:
-    kind: option
+  s13:
+    kind: arm
     weight: 0.65
     arguments:
     - argument:
-        $ref: s17
+        $ref: s19
         $schema: Expressions.OfOperation
       index: 0
-  s13:
+  s14:
     kind: extent
     schema: Contact
-  s14:
+  s15:
     kind: exists
     name: p
     arguments:
     - argument:
-        $ref: s18
-        $schema: Patterns.OfExtent
-      index: 0
-    - argument:
-        $ref: s19
-        $schema: Expressions.OfOperation
-      index: 1
-  s15:
-    kind: extent
-    schema: Phone
-  s16:
-    kind: quantifier
-    name: e
-    quantifier: any
-    arguments:
-    - argument:
         $ref: s20
-        $schema: Expressions.OfOperation
+        $schema: Patterns.OfExtent
       index: 0
     - argument:
         $ref: s21
         $schema: Expressions.OfOperation
       index: 1
-  s17:
-    kind: operation
-    name: not
-    arguments:
-    - argument:
-        $ref: s10
-        $schema: Patterns.OfExists
-      index: 0
-  s18:
+  s16:
     kind: extent
     schema: Phone
-  s19:
-    kind: operation
-    name: and
+  s17:
+    kind: quantifier
+    name: e
+    quantifier: any
     arguments:
     - argument:
         $ref: s22
-        $schema: Expressions.OfQuantifier
+        $schema: Expressions.OfOperation
       index: 0
     - argument:
         $ref: s23
         $schema: Expressions.OfOperation
       index: 1
-  s20:
+  s18:
     kind: operation
-    name: entries
+    name: ge
     arguments:
     - argument:
         $ref: s24
@@ -201,123 +190,164 @@ objects:
         $ref: s25
         $schema: Expressions.OfLiteral
       index: 1
+  s19:
+    kind: operation
+    name: not
+    arguments:
+    - argument:
+        $ref: s10
+        $schema: Patterns.OfExists
+      index: 0
+  s20:
+    kind: extent
+    schema: Phone
   s21:
     kind: operation
-    name: eq
+    name: and
     arguments:
     - argument:
         $ref: s26
-        $schema: Expressions.OfOperation
+        $schema: Expressions.OfQuantifier
       index: 0
     - argument:
         $ref: s27
-        $schema: Expressions.OfVariable
+        $schema: Expressions.OfOperation
       index: 1
   s22:
-    kind: quantifier
-    name: e
-    quantifier: any
+    kind: operation
+    name: entries
     arguments:
     - argument:
         $ref: s28
-        $schema: Expressions.OfOperation
+        $schema: Expressions.OfVariable
       index: 0
     - argument:
         $ref: s29
-        $schema: Expressions.OfOperation
+        $schema: Expressions.OfLiteral
       index: 1
   s23:
     kind: operation
-    name: not
+    name: eq
     arguments:
     - argument:
         $ref: s30
         $schema: Expressions.OfOperation
       index: 0
+    - argument:
+        $ref: s31
+        $schema: Expressions.OfVariable
+      index: 1
   s24:
     kind: variable
     name: c
   s25:
     kind: literal
-    str: phones
+    int: 1
   s26:
-    kind: operation
-    name: get
+    kind: quantifier
+    name: e
+    quantifier: any
     arguments:
-    - argument:
-        $ref: s31
-        $schema: Expressions.OfVariable
-      index: 0
     - argument:
         $ref: s32
-        $schema: Expressions.OfLiteral
-      index: 1
-  s27:
-    kind: variable
-    name: p
-  s28:
-    kind: operation
-    name: entries
-    arguments:
-    - argument:
-        $ref: s24
-        $schema: Expressions.OfVariable
+        $schema: Expressions.OfOperation
       index: 0
     - argument:
         $ref: s33
-        $schema: Expressions.OfLiteral
+        $schema: Expressions.OfOperation
       index: 1
-  s29:
+  s27:
     kind: operation
-    name: eq
+    name: not
     arguments:
     - argument:
         $ref: s34
         $schema: Expressions.OfOperation
       index: 0
-    - argument:
-        $ref: s27
-        $schema: Expressions.OfVariable
-      index: 1
-  s30:
-    kind: operation
-    name: has
-    arguments:
-    - argument:
-        $ref: s27
-        $schema: Expressions.OfVariable
-      index: 0
-    - argument:
-        $ref: s35
-        $schema: Expressions.OfLiteral
-      index: 1
-  s31:
+  s28:
     kind: variable
-    name: e
-  s32:
-    kind: literal
-    str: phone
-  s33:
+    name: c
+  s29:
     kind: literal
     str: phones
-  s34:
+  s30:
     kind: operation
     name: get
     arguments:
     - argument:
+        $ref: s35
+        $schema: Expressions.OfVariable
+      index: 0
+    - argument:
         $ref: s36
+        $schema: Expressions.OfLiteral
+      index: 1
+  s31:
+    kind: variable
+    name: p
+  s32:
+    kind: operation
+    name: entries
+    arguments:
+    - argument:
+        $ref: s28
         $schema: Expressions.OfVariable
       index: 0
     - argument:
         $ref: s37
         $schema: Expressions.OfLiteral
       index: 1
+  s33:
+    kind: operation
+    name: eq
+    arguments:
+    - argument:
+        $ref: s38
+        $schema: Expressions.OfOperation
+      index: 0
+    - argument:
+        $ref: s31
+        $schema: Expressions.OfVariable
+      index: 1
+  s34:
+    kind: operation
+    name: has
+    arguments:
+    - argument:
+        $ref: s31
+        $schema: Expressions.OfVariable
+      index: 0
+    - argument:
+        $ref: s39
+        $schema: Expressions.OfLiteral
+      index: 1
   s35:
-    kind: literal
-    str: number
-  s36:
     kind: variable
     name: e
+  s36:
+    kind: literal
+    str: phone
   s37:
+    kind: literal
+    str: phones
+  s38:
+    kind: operation
+    name: get
+    arguments:
+    - argument:
+        $ref: s40
+        $schema: Expressions.OfVariable
+      index: 0
+    - argument:
+        $ref: s41
+        $schema: Expressions.OfLiteral
+      index: 1
+  s39:
+    kind: literal
+    str: number
+  s40:
+    kind: variable
+    name: e
+  s41:
     kind: literal
     str: phone

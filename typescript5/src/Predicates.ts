@@ -34,9 +34,8 @@
  * - `Contains(c.phones, (e) => e.phone.eq(p))`: whether one of `c`'s entries in its adjacency `phones` satisfies the
  *   condition, which the function writes, given its parameter as a variable bound to the entry: the targets of the
  *   entry's other links, and its property values, by name. It is Basic's `any` over `entries(c, 'phones')`;
- * - `Choice((ch) => ch.option(0.35, spec).option(0.65, spec))`: a weighted disjunction, which holds when any of its
- *   options holds; the weights, positive and summing to 1, are how often a generator chooses each option, and what a
- *   characterizer estimates;
+ * - `Distributions.Choices` and the distributions of values (`Distributions.Normal`, ...): weighted alternatives, and
+ *   values drawn, which say how matches are distributed (see `Distributions`);
  * - `OfSet`: predicates, gathered in order.
  *
  * A quantifier ranges over its schema's extent in the store (its `extent` term: what the store's singletons reach).
@@ -50,11 +49,13 @@
  */
 
 import { Domains as BasicDomains, Evaluators as Basic, Expressions as E } from "@mbse/expressions";
-import { Evaluators as F, Terms } from "@mbse/expressions/Framework";
+import { Evaluators as F, Symbolics, Terms } from "@mbse/expressions/Framework";
 import { Modules, Schemas, Stores } from "@mbse/schemas/Framework";
 import type { PlainMap } from "@mbse/schemas/Framework/Plain";
 import { repr, typeName } from "@mbse/schemas/Framework/Repr";
 import type { Visitable } from "@mbse/schemas/Framework/Visitors";
+
+import * as Distributions from "./Distributions.js";
 
 export const PREDICATE = "Patterns.Predicate";
 export const SET = "Patterns.Set";
@@ -188,55 +189,6 @@ export class OfExists extends Quantified {
   declare static Builder: typeof ExistsBuilder;
 }
 
-/** An option of a choice: its predicate, and its weight. */
-export class OfOption extends Terms.Term {
-  static override KIND = "option";
-  static override ROLE = Terms.APPLICATION;
-  static override PROPERTIES = new Map<string, unknown>([["weight", Number]]);
-  static override SLOTS = ["body"];
-  /** Builds this kind. */
-  declare static Builder: typeof OptionBuilder;
-  declare weight: unknown;
-  declare body: any;
-
-  constructor(weight: unknown = null, body: unknown = null) {
-    super(weight, body);
-  }
-
-  override check(): string[] {
-    const weight = this.weight;
-    if (typeof weight === "number" && !(weight > 0 && Number.isFinite(weight))) {
-      return [`an option's weight must be positive, got ${repr(weight)}`];
-    }
-    return [];
-  }
-}
-
-/** A weighted disjunction of options: it holds when any of them holds. */
-export class OfChoice extends Terms.Term {
-  static override KIND = "choice";
-  static override ROLE = Terms.APPLICATION;
-  static override VARIADIC = "options";
-  /** Builds this kind. */
-  declare static Builder: typeof ChoiceBuilder;
-  declare options: readonly any[];
-
-  constructor(options: readonly unknown[] = []) {
-    super(options);
-  }
-
-  override check(): string[] {
-    if (!this.options.every((option) => option instanceof OfOption)) return ["a choice's arguments are options"];
-    if (this.options.length === 0) return ["a choice needs an option"];
-    const weights = this.options.map((option) => (option as OfOption).weight);
-    if (weights.every((w) => typeof w === "number")) {
-      const sum = (weights as number[]).reduce((a, b) => a + b, 0);
-      if (Math.abs(sum - 1) > 1e-9) return [`a choice's weights must sum to 1, got ${repr(sum)}`];
-    }
-    return [];
-  }
-}
-
 /** A rule over symbols and parameters, which it binds within the rule. `predicate.call(...arguments)` applies it: see
  * `OfApply`. */
 export class OfPredicate extends Terms.Term {
@@ -351,13 +303,13 @@ abstract class QuantifiedBuilder extends Terms.Builder implements Declaring {
     return this;
   }
 
-  requires(spec: unknown): this {
-    this.conditions.push(DIALECT.resolve(spec));
+  requires(...specs: unknown[]): this {
+    this.conditions.push(...specs.map((spec) => DIALECT.resolve(spec)));
     return this;
   }
 
-  forbids(spec: unknown): this {
-    this.conditions.push(negation(spec));
+  forbids(...specs: unknown[]): this {
+    this.conditions.push(...specs.map((spec) => negation(spec)));
     return this;
   }
 
@@ -396,28 +348,6 @@ class ForallBuilder extends QuantifiedBuilder {
 
 class ExistsBuilder extends QuantifiedBuilder {
   static override DATA = OfExists;
-}
-
-/** Builds a choice. DSL: `.option(weight, spec)` adds an option. */
-class ChoiceBuilder extends Terms.Builder {
-  static override DATA = OfChoice;
-
-  option(weight: number, spec: unknown): this {
-    return this.arguments(new OfOption(weight, DIALECT.resolve(spec)));
-  }
-}
-
-/** Builds an option. DSL: `.weight(number)` and `.body(spec)`. */
-class OptionBuilder extends Terms.Builder {
-  static override DATA = OfOption;
-
-  weight(weight: number): this {
-    return this.set("weight", weight);
-  }
-
-  body(spec: unknown): this {
-    return this.argument("body", spec);
-  }
 }
 
 /** Builds an extent. DSL: `.schema(schema)`, a named schema or its name. */
@@ -474,15 +404,15 @@ class PredicateBuilder extends Terms.Builder implements Declaring {
     return this;
   }
 
-  /** Adds a condition: a spec of the algebra whose free names are the symbols and parameters. */
-  requires(spec: unknown): this {
-    this.conditions.push(DIALECT.resolve(spec));
+  /** Adds conditions: specs of the algebra whose free names are the symbols and parameters. */
+  requires(...specs: unknown[]): this {
+    this.conditions.push(...specs.map((spec) => DIALECT.resolve(spec)));
     return this;
   }
 
-  /** Adds the condition that `spec` does not hold. */
-  forbids(spec: unknown): this {
-    this.conditions.push(negation(spec));
+  /** Adds the conditions that each of `specs` does not hold. */
+  forbids(...specs: unknown[]): this {
+    this.conditions.push(...specs.map((spec) => negation(spec)));
     return this;
   }
 
@@ -541,23 +471,21 @@ class ApplyBuilder extends Terms.Builder {
   static override DATA = OfApply;
 }
 
-const KINDS = [OfExtent, OfForall, OfExists, OfChoice, OfOption, OfPredicate, OfApply, OfSet];
-const BUILDERS = [ExtentBuilder, ForallBuilder, ExistsBuilder, ChoiceBuilder, OptionBuilder, PredicateBuilder, ApplyBuilder, SetBuilder];
+const KINDS = [OfExtent, OfForall, OfExists, OfPredicate, OfApply, OfSet, ...Distributions.KINDS];
+const BUILDERS = [ExtentBuilder, ForallBuilder, ExistsBuilder, PredicateBuilder, ApplyBuilder, SetBuilder, ...Distributions.BUILDERS];
 const NAMES = new Map([["predicate", PREDICATE], ["set", SET]]);
 
 /** The predicate algebra: Basic's kinds, and the kinds above. */
 export const DIALECT = new Terms.Declared("Predicates", KINDS as unknown as Terms.TermClass[], {
   domain_of: BasicDomains.of, extends: E.DIALECT,
   builders: new Map(KINDS.map((kind, i) => [kind.KIND, BUILDERS[i] as unknown as typeof Terms.Builder])),
-  schemaNames: new Map(KINDS.map((kind) => [kind.KIND,
+  schemaNames: new Map((KINDS as unknown as { KIND: string }[]).map((kind) => [kind.KIND,
     NAMES.get(kind.KIND) ?? `Patterns.Of${kind.KIND[0]!.toUpperCase()}${kind.KIND.slice(1)}`])),
 });
 
 OfExtent.Builder = ExtentBuilder;
 OfForall.Builder = ForallBuilder;
 OfExists.Builder = ExistsBuilder;
-OfChoice.Builder = ChoiceBuilder;
-OfOption.Builder = OptionBuilder;
 OfPredicate.Builder = PredicateBuilder;
 OfApply.Builder = ApplyBuilder;
 OfSet.Builder = SetBuilder;
@@ -571,9 +499,6 @@ export namespace OfExists {
 }
 export namespace OfForall {
   export type Builder = ForallBuilder;
-}
-export namespace OfChoice {
-  export type Builder = ChoiceBuilder;
 }
 export namespace OfSet {
   export type Builder = SetBuilder;
@@ -589,18 +514,6 @@ export function Forall(spec: OfForall | ((builder: ForallBuilder) => ForallBuild
   return Terms.resolve(spec, (v): v is OfForall => v instanceof OfForall, () => new ForallBuilder(), "a forall");
 }
 
-/** A weighted disjunction: `Choice((ch) => ch.option(0.35, p).option(0.65, q))` holds when `p` or `q` does. */
-export function Choice(spec: OfChoice | ((builder: ChoiceBuilder) => ChoiceBuilder)): OfChoice {
-  return Terms.resolve(spec, (v): v is OfChoice => v instanceof OfChoice, () => new ChoiceBuilder(), "a choice");
-}
-
-/** The name of a function's one parameter, from its source. */
-function parameter(condition: unknown): string | null {
-  if (typeof condition !== "function" || condition.length !== 1) return null;
-  const found = /^\s*(?:async\s*)?(?:function\b[^(]*)?\(?\s*([A-Za-z_$][\w$]*)/.exec(String(condition));
-  return found === null ? null : found[1] as string;
-}
-
 /** Whether one of an object's entries in an adjacency, written `c.phones`, satisfies `condition`, a function of one
  * entry given its parameter as a variable: Basic's `any(e in entries(c, 'phones'), ...)`. */
 export function Contains(adjacency: unknown, condition: (entry: E.Writer) => unknown): E.OfQuantifier.Data {
@@ -609,7 +522,7 @@ export function Contains(adjacency: unknown, condition: (entry: E.Writer) => unk
     && collection.arguments[1] instanceof E.OfLiteral.Data && typeof collection.arguments[1].value === "string")) {
     throw new TypeError("Contains expects an object's adjacency, such as c.phones");
   }
-  const name = parameter(condition);
+  const name = Distributions.parameter(condition);
   if (name === null) throw new TypeError("Contains expects a function of one entry");
   const collected = E.operation("entries", collection.arguments[0] as E.OfAny.Spec, collection.arguments[1].value as string);
   return E.quantifier("any", name, collected, DIALECT.resolve(condition(E.variable(name))) as E.OfAny.Spec).data as E.OfQuantifier.Data;
@@ -619,32 +532,59 @@ export function Contains(adjacency: unknown, condition: (entry: E.Writer) => unk
 
 type Thunk = () => unknown;
 
-/** Kleene's disjunction of the options. */
-function choiceOf(thunks: Thunk[]): boolean | null {
-  let unknown = false;
-  for (const thunk of thunks) {
-    const value = thunk();
-    if (value === true) return true;
-    if (value === null) unknown = true;
-    else if (value !== false) throw new TypeError(`a choice's options must be bools, got ${typeName(value)}`);
+/** Whether `value` is in a distribution's support, its parameters given by `parameter(name)`. */
+function inSupport(drawn: Distributions.Drawn, value: unknown, parameter: (name: string) => unknown): boolean {
+  if (drawn instanceof Distributions.Normal) {
+    return drawn.rounded ? typeof value === "bigint" : typeof value === "bigint" || (typeof value === "number" && Number.isFinite(value));
   }
-  return unknown ? null : false;
+  if (drawn instanceof Distributions.Uniform) {
+    const [low, high] = [parameter("low"), parameter("high")] as [any, any];
+    if (typeof low === "bigint" && typeof high === "bigint") return typeof value === "bigint" && low <= value && value <= high;
+    return (typeof value === "bigint" || typeof value === "number") && low <= value && value < high;
+  }
+  if (drawn instanceof Distributions.Poisson || drawn instanceof Distributions.Geometric) {
+    return typeof value === "bigint" && value >= 0n;
+  }
+  return (drawn as Distributions.Categorical).options.some((option) => option.value instanceof E.OfLiteral.Data
+    && typeof value === typeof option.value.value && value === option.value.value);
 }
 
-/** Evaluates predicates over `store`: Basic's rules, with extents from the store and applications of predicates.
- * Extents are read once per evaluator, so an evaluator sees the store as it was when first asked. */
+function truth(value: unknown): boolean | null {
+  if (value !== null && typeof value !== "boolean") throw new TypeError(`a predicate must be a bool, got ${typeName(value)}`);
+  return value as boolean | null;
+}
+
+/** Basic's interpreter, which also evaluates the distributions' binding forms itself. */
+class Interpreter extends F.Interpreter {
+  override evaluate(expression: unknown, scope: any, active: Set<unknown>): any {
+    if (!Distributions.DRAWN.some((kind) => expression instanceof kind)) return super.evaluate(expression, scope, active);
+    const drawn = expression as Distributions.Drawn;
+    const found = Distributions.witness(drawn);
+    const value = found === null ? null : this.evaluate(found, scope, active);
+    if (value === null) return null;
+    if (!inSupport(drawn, value, (name) => this.evaluate((drawn as any)[name], scope, active))) return false;
+    return this.evaluate(drawn.body, scope.bind(drawn.symbol as string, value), active);
+  }
+}
+
+/** Evaluates predicates over `store`: Basic's rules, with extents from the store, applications of predicates, choices
+ * (whether the number of arms that hold satisfies their count) and distributions (whether the value their body equates
+ * their symbol with is in their support, and the body holds with it). Extents are read once per evaluator, so an
+ * evaluator sees the store as it was when first asked. */
 export class Evaluator {
   readonly interpreter: F.Interpreter;
   readonly #extents = new Map<string, readonly Visitable[]>();
+  /** When given, how each choices' arms held, by node. */
+  observe: Map<unknown, (boolean | null)[]> | null = null;
 
   constructor(readonly store: Stores.Store) {
     const quantifiers = Basic.QUANTIFIERS;
-    this.interpreter = new F.Interpreter(DIALECT, new Map<string, unknown>([
+    this.interpreter = new Interpreter(DIALECT, new Map<string, unknown>([
       ["operation", Basic.OPERATIONS], ["quantifier", quantifiers],
       ["extent", (_: Thunk[], node: OfExtent) => this.extent(node.schema as string)],
       ["forall", quantifiers.get("all")], ["exists", quantifiers.get("any")],
-      ["choice", (thunks: Thunk[]) => choiceOf(thunks)], ["option", (thunks: Thunk[]) => (thunks[0] as Thunk)()],
       ["apply", (thunks: Thunk[], node: OfApply) => this.apply(thunks, node)],
+      ["choices", (_: Thunk[], node: Distributions.Choices, scope: any) => this.choices(node, scope)],
     ]) as never, { typed: (domain, value) => new BasicDomains.Value(domain, value) });
   }
 
@@ -666,6 +606,50 @@ export class Evaluator {
     const predicate = node.predicate as OfPredicate;
     const values = thunks.slice(1).map((thunk) => thunk());
     return this.interpreter.run(predicate.rule, Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]])));
+  }
+
+  /** Whether each of a choices' arms holds, in order. */
+  held(node: Distributions.Choices, scope: any): (boolean | null)[] {
+    return node.arms.map((arm) => truth(this.interpreter.evaluate(arm.condition, scope, new Set())));
+  }
+
+  private choices(node: Distributions.Choices, scope: any): boolean | null {
+    const held = this.held(node, scope);
+    this.observe?.set(node, held);
+    const count = node.count as Distributions.Count;
+    const least = held.filter((h) => h === true).length;
+    const found = new Set<boolean | null>();
+    for (let n = least; n <= least + held.filter((h) => h === null).length; n++) { // every count the unknown arms allow
+      found.add(truth(this.interpreter.evaluate(count.condition, scope.bind(count.name as string, BigInt(n)), new Set())));
+    }
+    return found.size === 1 ? [...found][0] as boolean | null : null;
+  }
+
+  /** What a match weighs under a rule: 0 unless the rule holds; then the product, over the choices on its conjuncts, of
+   * the weight of the arm the match falls under (the first that holds, with `decreasing`) or the sum of those of the
+   * arms that hold, each times what the match weighs under the arm's condition. */
+  weigh(rule: unknown, scope: Record<string, unknown>): number {
+    const variables = new Symbolics.Variables(scope);
+    const resolved = DIALECT.resolve(rule);
+    return this.interpreter.evaluate(resolved, variables, new Set()) === true ? this.weighed(resolved, variables) : 0;
+  }
+
+  private weighed(node: unknown, scope: any): number {
+    if (node instanceof E.OfOperation.Data && node.name === "and" && node.arguments.length === 2) {
+      return this.weighed(node.arguments[0], scope) * this.weighed(node.arguments[1], scope);
+    }
+    if (node instanceof OfApply) {
+      const values = node.arguments.map((argument) => this.interpreter.evaluate(argument, scope, new Set()));
+      const predicate = node.predicate as OfPredicate;
+      return this.weighed(predicate.rule, new Symbolics.Variables(Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]]))));
+    }
+    if (node instanceof Distributions.Choices) {
+      const held = this.held(node, scope);
+      const weights = node.arms.filter((_, i) => held[i] === true)
+        .map((arm: Distributions.Arm) => (arm.weight as number) * this.weighed(arm.condition, scope));
+      return node.decreasing ? weights[0] ?? 0 : weights.reduce((a, b) => a + b, 0);
+    }
+    return 1;
   }
 }
 

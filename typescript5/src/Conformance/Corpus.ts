@@ -54,23 +54,25 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
     (b) => b.name("Mandatory").requires(P.Forall((q) => q.symbols({ c: Contact }).requires(owns))),
     (b) => b.name("Forbidden").symbols({ c: Contact }).forbids(owns),
     (b) => b.name("Possible").symbols({ c: Contact }).requires(
-      P.Choice((ch) => ch.option(0.35, owns).option(0.65, E.operation("not", owns)))),
+      new D.Choices.Builder().arms((a) => a.weight(0.35).requires(owns),
+        (a) => a.weight(0.65).requires(E.operation("not", owns))).create()),
     (b) => b.name("Unnumbered").requires(P.Exists((q) => q.symbols({ c: Contact, p: Phone })
       .requires(P.Contains(c.phones, (e) => e.phone.eq(p))).forbids(p.has("number")))),
   ).create();
 
-  // --- weights: weighted cases in decreasing precedence, inline predicates applying one predicate, written once ---
+  // --- weights: a predicate whose choices weigh names, in decreasing precedence, each applying one predicate ---
   const APerson = { person: Contact };
-  const HasName = new P.OfPredicate.Builder().name("HasName").symbols(APerson).parameters((p) => p.name("name")).requires(
-    E.variable("person").name.eq(E.variable("name"))).create();
-  const weights = new D.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
-    (wt) => wt.weight(10).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "alice"))),
-    (wt) => wt.weight(5).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "ben"))),
-    (wt) => wt.weight(15).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "chermon"))),
-    (wt) => wt.weight(7).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "davi"))),
-  ).create();
+  const person = E.variable("person");
+  const HasName = new P.OfPredicate.Builder().name("HasName").symbols(APerson).parameters((x) => x.name("name")).requires(
+    person.name.eq(E.variable("name"))).create();
+  const weights = new P.OfPredicate.Builder().name("Names").symbols(APerson).requires(new D.Choices.Builder().arms(
+    (a) => a.weight(10).requires(HasName.call(person, "alice")),
+    (a) => a.weight(5).requires(HasName.call(person, "ben")),
+    (a) => a.weight(15).requires(HasName.call(person, "chermon")),
+    (a) => a.weight(7).requires(HasName.call(person, "davi")),
+  ).decreasing().create()).create();
 
-  // --- generated: twelve contacts generated from the weights, from the seed 42, listed in a directory ---
+  // --- generated: twelve contacts generated from the names, from the seed 42, listed in a directory ---
   const book: any = new Proxies.OfStore();
   for (const schema of [Contact, Phone, Phones, Listed, Directory]) book.register(schema);
   const directory = book.Directory().create(); // not a singleton: reading a snapshot back makes another
@@ -80,17 +82,19 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
     book.Directory(directory).contacts((e: any) => e.contact(contact)).update();
   }
 
-  // --- drawn: cases whose draws fill what their predicates leave open, from every kind of distribution, and twelve
+  // --- drawn: choices whose arms draw values from every kind of distribution, one nested as a mixture, and twelve
   //     contacts generated from them, from the seed 7 ---
-  const drawing = new D.OfWeights.Builder().name("People").symbols(APerson).decreasing(
-    (wt) => wt.weight(1).requires((pred) => pred.symbols(APerson).requires(pred.person.age.ge(65n)))
-      .draw(wt.person.age, D.Normal((n) => n.mean(70n).deviation(8n).rounded()))
-      .draw(wt.person.name, D.Categorical((c) => c.option(3, "ann").option(1, "bo"))),
-    (wt) => wt.weight(3).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "cy")))
-      .draw(wt.person.age, D.Mixture((m) => m.option(1, D.Uniform((u) => u.low(18n).high(64n)))
-        .option(1, D.Poisson((p) => p.rate(30n)))
-        .option(1, D.Geometric((g) => g.probability(0.05))))),
-  ).create();
+  const aged = (distribution: any) => distribution.symbol("age").requires(person.age.eq(E.variable("age"))).create();
+  const drawing = new P.OfPredicate.Builder().name("People").symbols(APerson).requires(new D.Choices.Builder().arms(
+    (a) => a.weight(1).requires(
+      aged(new D.Normal.Builder().mean(70n).deviation(8n).rounded()), person.age.ge(65n),
+      new D.Categorical.Builder().symbol("name").option(3, "ann").option(1, "bo").requires(
+        person.name.eq(E.variable("name"))).create()),
+    (a) => a.weight(3).requires(HasName.call(person, "cy"), new D.Choices.Builder().arms(
+      (m) => m.weight(1).requires(aged(new D.Uniform.Builder().low(18n).high(64n))),
+      (m) => m.weight(1).requires(aged(new D.Poisson.Builder().rate(30n))),
+      (m) => m.weight(1).requires(aged(new D.Geometric.Builder().probability(0.05)))).create()),
+  ).decreasing().create()).create();
   const drawn: any = new Proxies.OfStore();
   for (const schema of [Contact, Phone, Phones, Listed, Directory]) drawn.register(schema);
   const listing = drawn.Directory().create();
@@ -104,7 +108,7 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
     ["predicates", [C.OfSet.Schema, predicates, store] as const],
     ["empty", [C.OfSet.Schema, empty, store] as const],
     ["algebra", [C.OfSet.Schema, algebra, store] as const],
-    ["weights", [D.OfWeights.Schema, weights, store] as const],
+    ["weights", [P.OfPredicate.Schema, weights, store] as const],
     ["generated", [Directory, directory, book] as const],
     ["drawn", [Directory, listing, drawn] as const],
   ]);

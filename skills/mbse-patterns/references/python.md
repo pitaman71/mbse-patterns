@@ -48,8 +48,9 @@ HasAPhone = Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(owns))
 EveryoneHasAPhone = (Predicates.OfPredicate.Builder().name("EveryoneHasAPhone")  # no symbols: a statement about the whole store
                      .requires(Predicates.Forall(lambda q: q.symbols({"c": Contact}).requires(HasAPhone))).create())
 Phoneless = Predicates.OfPredicate.Builder().name("Phoneless").symbols({"c": Contact}).forbids(HasAPhone).create()
-Sometimes = (Predicates.OfPredicate.Builder().name("Sometimes").symbols({"c": Contact}).requires(Predicates.Choice(
-    lambda ch: ch.option(0.35, HasAPhone).option(0.65, E.operation("not", HasAPhone)))).create())
+Sometimes = (Predicates.OfPredicate.Builder().name("Sometimes").symbols({"c": Contact}).requires(
+    Distributions.Choices.Builder().arms(lambda a: a.weight(0.35).requires(HasAPhone),
+                                         lambda a: a.weight(0.65).requires(E.operation("not", HasAPhone))).create()).create())
 
 # The store's data is what its singleton directory reaches.
 ann = store.Contact().name("Ann").age(30).phones(lambda x: x.phone(lambda q: q.number("555-0100"))).create()
@@ -82,20 +83,21 @@ assert query.explain(numbered) == ["c: scan Contact", "p: c.phones to phone, any
 assert [(m["c"].name, m["p"].number) for m in query.select(numbered)] == [("Ann", "555-0100")]
 assert list(query.select(IsAnAdult, unknown=True)) == [{"the": ann}, {"the": bob}]
 
-# Parameters: a predicate applied by reference, to a symbol and a value. Distributions weigh cases of predicates, given
-# by reference or inline, in decreasing precedence, and each case draws what it leaves open from distributions of
-# values; a generator builds new data from them, from a seed, redrawing until each case holds.
+# Parameters: a predicate applied by reference, to a symbol and a value. A pattern is a predicate: choices weigh its
+# alternatives, and distributions bind values its equalities set; a generator builds new data from it, from a seed,
+# redrawing until it holds.
 HasName = (Predicates.OfPredicate.Builder().name("HasName").symbols({"person": Contact})
            .parameters(lambda p: p.name("name"))
            .requires(Text.FromFunction(lambda person, name: person.name == name)).create())
-APerson = {"person": Contact}
-Names = Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
-    lambda wt: wt.weight(3).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Cy")))
-    .draw(wt.person.age, Distributions.Uniform(lambda u: u.low(18).high(64))),  # ints, 18 to 64
-    lambda wt: wt.weight(1).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Di"))
-                                     .requires(pred.person.age.ge(65)))  # drawn again until 65 or over
-    .draw(wt.person.age, Distributions.Normal(lambda n: n.mean(70).deviation(8).rounded()))).create()
-generated = Generators.Generate(store, Names, Stores.PCG32(42))  # new contacts, as the cases say
+APerson, person = {"person": Contact}, E.variable("person")
+Names = Predicates.OfPredicate.Builder().name("Names").symbols(APerson).requires(Distributions.Choices.Builder().arms(
+    lambda a: a.weight(3).requires(HasName(person, "Cy"), Distributions.Uniform.Builder().symbol("age").low(18).high(64)
+                                   .requires(lambda person, age: person.age == age).create()),  # ints, 18 to 64
+    lambda a: a.weight(1).requires(HasName(person, "Di"), Distributions.Normal.Builder().symbol("age").mean(70).deviation(8)
+                                   .rounded().requires(lambda person, age: person.age == age).create(),
+                                   person.age.ge(65)),  # drawn again until 65 or over
+).decreasing().create()).create()
+generated = Generators.Generate(store, Names, Stores.PCG32(42))  # new contacts, as the arms say
 people = [next(generated)["person"] for _ in range(400)]
 assert {p.name for p in people} == {"Cy", "Di"} and 250 < sum(p.name == "Cy" for p in people) < 350  # about 3 to 1
 assert all(18 <= p.age <= 64 if p.name == "Cy" else p.age >= 65 for p in people) and generated.rejected > 0
@@ -116,15 +118,14 @@ Queries.Scan(store).explain(predicate, variables=None)                     # the
 Queries.select(store, predicate, ...)                       # a queryable store's own select, or a scan
 Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(spec).forbids(spec))   # and Forall: the algebra
 Predicates.Contains(c.phones, lambda e: e.phone == p)       # Basic's any over entries(c, 'phones'); a hop for the planner
-Predicates.Choice(lambda ch: ch.option(0.35, spec).option(0.65, spec))   # a weighted disjunction
 Predicates.Evaluator(store)(rule, variables)                # evaluates the algebra over a store
-Distributions.OfWeights.Builder().symbols(S).decreasing(lambda wt: wt.weight(3).requires(spec), ...).create()
-Distributions.weight(Predicates.Evaluator(store), weights, match)          # the first holding case's weight, or 0.0
-Distributions.Sample(store, weights, Stores.PCG32(seed))    # the store's matches, drawn by weight
-Generators.Generate(store, weights, Stores.PCG32(seed))     # new objects: a case by weight, its equalities, its draws
-wt.weight(3).requires(spec).draw(wt.person.age, Distributions.Normal(lambda n: n.mean(70).deviation(8).rounded()))
-Distributions.Uniform(lambda u: u.low(a).high(b)); Poisson(lambda p: p.rate(r)); Geometric(lambda g: g.probability(p))
-Distributions.Categorical(lambda c: c.option(3, "x").option(1, "y")); Mixture(lambda m: m.option(1, dist).option(2, dist))
+Distributions.Choices.Builder().arms(lambda a: a.weight(3).requires(*specs), ...).count(lambda c: c >= 1).decreasing().create()
+Distributions.Normal.Builder().symbol("age").mean(70).deviation(8).rounded().requires(lambda person, age: person.age == age).create()
+Distributions.Uniform.Builder().symbol(s).low(a).high(b); Poisson...rate(r); Geometric...probability(p)
+Distributions.Categorical.Builder().symbol(s).option(3, "x").option(1, "y")   # mixtures: choices of distributions
+Predicates.Evaluator(store).weigh(rule, match)              # the weight of the arms a match falls under, or 0.0
+Generators.Sample(store, predicate, Stores.PCG32(seed))     # the store's matches, drawn by weight
+Generators.Generate(store, predicate, Stores.PCG32(seed))   # new matches: arms by weight, values drawn, equalities set
 ```
 
 ## Traps
@@ -136,9 +137,10 @@ Distributions.Categorical(lambda c: c.option(3, "x").option(1, "y")); Mixture(la
   contact. Validate one object alone with `validate(schema, value)`.
 - A query's variables must not be named like its symbols, and an object variable is bound per match (it has no
   literal). A predicate's parameters are given as a query's variables, or by applying it; a validator refuses it.
-- A distribution's cases are in decreasing precedence: a match weighs what the first case that holds says, so put the
-  more specific cases first. A generator sets what a case requires by equality (`x.p == v`, through applied
-  predicates), draws what its draws say, and redraws, up to 100 times, until the case is the first to hold.
-- A draw must give its property's type: a normal gives floats unless `.rounded()`; a uniform gives ints only when both
-  bounds are ints.
+- With `.decreasing()`, a match falls under the first arm of a choices that holds, so put the more specific arms first.
+  A generator chooses arms by weight, draws values, sets what equalities say (`x.p == v`, through applied predicates),
+  and redraws, up to 100 times, until the predicate holds, its chosen arms hold, and first.
+- A distribution's value reaches a property only through an equality in its body (`person.age == age`), and must be
+  of the property's type: a normal gives floats unless `.rounded()`; a uniform gives ints only when both bounds are
+  ints. Validating data, a distribution holds when the value that equality gives is in its support.
 - Sampling and generating take a random source, not a store's: the same seed gives the same draws, in both languages.

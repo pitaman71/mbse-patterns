@@ -14,7 +14,7 @@ It is planned in releases, each landed and reviewed before the next:
 | 0.1 | [Predicates](#predicates), [validators](#validators), [queries](#queries) and the queryable in-memory store | built |
 | 0.2 | [The predicate algebra](#the-predicate-algebra) and [pseudorandom numbers](#pseudorandom-numbers) | built |
 | 0.3 | [Parameters and application](#parameters-and-application), [distributions](#distributions), [sampling](#pseudorandom-numbers) and [generators](#generators) | built |
-| 0.4 | [Distributions of values](#distributions-of-values), filling what cases leave open | built |
+| 0.4 | [Distributions](#distributions) as terms of a predicate: `Choices` and distributions of values | built |
 | 0.5 | [Characterizers](#characterizers), which fit distributions from streams of data | designed |
 
 ```
@@ -23,9 +23,9 @@ python3/mbse/Patterns/, typescript5/src/
   Constraints    reading and writing predicates and distributions as data; check
   Validators     data checked against predicates
   Queries        a rule as a query; the queryable store protocol; Scan, the in-memory implementation
-  Distributions  weights of matches, as weighted cases of predicates; Sample
+  Distributions  terms of the algebra that weigh alternatives (Choices) and draw values (Normal, ...)
   Sampling       values drawn from a random source, specified exactly on its words
-  Generators     new data drawn from a distribution
+  Generators     data drawn from a predicate: Generate (new) and Sample (the store's)
   Conformance/   the corpus both implementations write byte-identically
 ```
 
@@ -127,8 +127,8 @@ and forbidden links are statements about the store, so they need both.
 - **`Predicates` is a dialect extending Basic**, declared with `Terms.Declared(..., extends=Basic)` (mbse-expressions
   0.2.3), so its trees may mix Basic's kinds and its own, and Basic's writers hold its terms. Every Basic expression is
   a condition as before. Each of its kinds is a data class with a builder, as schemas and predicates are, and
-  `Exists(spec)`, `Forall(spec)` and `Choice(spec)` resolve a spec (data, or a callable taking the builder); there are
-  no writer functions of their own:
+  `Exists(spec)` and `Forall(spec)` resolve a spec (data, or a callable taking the builder); there are no writer
+  functions of their own:
   - `Exists(lambda q: q.symbols({"p": Phone}).requires(...).forbids(...))` and `Forall(...)`, quantifiers whose
     collection is an `extent`, a schema's objects in the store, and which bind each symbol to each of its objects.
     Their builders take symbols and conditions as a predicate's does; with several symbols, the first is the
@@ -138,17 +138,16 @@ and forbidden links are statements about the store, so they need both.
     on the entry. It is Basic's `any(e in entries(c, 'phones'), e.phone == p)`, not a term of its own: Python reads the
     condition as `FromFunction` reads a function, and TypeScript calls it with a variable named after its parameter
     (`(e) => e.phone.eq(p)`). A relation of more than two links needs nothing more: the condition names the link;
-  - `Choice(lambda ch: ch.option(0.35, a).option(0.65, b))`, a weighted disjunction of `option`s: it holds when any of
-    them holds (Kleene's disjunction), and its weights, positive and summing to 1, are how often each option is chosen
-    by a generator, and what a characterizer estimates.
-  - Their meta-schemas are `Patterns.OfExtent`, `Patterns.OfForall`, `Patterns.OfExists`, `Patterns.OfChoice` and
-    `Patterns.OfOption`.
+  - the terms of `Distributions`, [below](#distributions): weighted alternatives (`Choices`), which replaced 0.2's
+    `Choice`, and distributions of values.
+  - Their meta-schemas are `Patterns.OfExtent`, `Patterns.OfForall`, `Patterns.OfExists`, `Patterns.Predicate`,
+    `Patterns.OfApply`, `Patterns.Set`, and `Patterns.OfChoices`, `Patterns.OfNormal`, ... for `Distributions`'.
 - **Links are mandatory, possible or forbidden by these terms**, with `owns = Exists(lambda q: q.symbols({"p":
   Phone}).requires(Contains(c.phones, lambda e: e.phone == p)))`:
   - mandatory: `Builder().symbols({"c": Contact}).requires(owns)`;
   - forbidden: `Builder().symbols({"c": Contact}).forbids(owns)`;
-  - possible, 35% of the time: `Builder().symbols({"c": Contact}).requires(Choice(lambda ch: ch.option(0.35, owns)
-    .option(0.65, not(owns))))`.
+  - possible, 35% of the time: `Builder().symbols({"c": Contact}).requires(Choices.Builder().arms(lambda a:
+    a.weight(0.35).requires(owns), lambda a: a.weight(0.65).requires(not(owns))).create())`.
 - **A predicate's symbols stay implicitly universal**; a predicate without symbols is a statement about the whole
   store, checked once (`Builder().requires(Forall(lambda q: q.symbols({"c": Contact}).requires(owns)))`).
 - **Evaluating these terms needs the store**, which Basic's evaluator never has: `Evaluator(store)` is Basic's
@@ -172,60 +171,57 @@ is applied in several places and written once.
 
 ## Distributions
 
-Built in 0.3. A distribution says how a population of matches is weighted, as data both implementations draw from
-identically.
+Built in 0.3 and 0.4. A pattern is a predicate: the terms of `Distributions`, in its rule, say how its matches are
+distributed, so that one predicate is validated, queried, sampled from and generated from alike. They are kinds of the
+algebra (`Predicates.DIALECT`), each built by a builder:
 
-- **`OfWeights` weighs the matches of its symbols by cases** (`Patterns.OfWeights`, `Patterns.OfCase`), in the
-  `Distributions` dialect, which extends the algebra:
+```python fragment
+person = E.variable("person")
+People = Predicates.OfPredicate.Builder().name("People").symbols({"person": Person}).requires(
+    Distributions.Choices.Builder().arms(
+        lambda a: a.weight(3).requires(
+            HasName(person, "senior"), person.age.ge(65),
+            Distributions.Normal.Builder().symbol("age").mean(70).deviation(8).rounded()
+            .requires(lambda person, age: person.age == age).create()),
+        lambda a: a.weight(7).requires(
+            HasName(person, "adult"),
+            Distributions.Uniform.Builder().symbol("age").low(18).high(64)
+            .requires(lambda person, age: person.age == age).create()),
+    ).count(lambda c: c >= 1).decreasing().create()).create()
+```
 
-  ```python fragment
-  APerson = {"person": Person}
-  Names = (
-      Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
-          lambda wt: wt.weight(10).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "alice"))),
-          lambda wt: wt.weight(5).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "ben"))),
-      )
-      .create()
-  )
-  ```
-
-  Each case is a positive weight and a predicate over the distribution's symbols (the same names and schemas, and no
-  parameters), given by reference or built inline by a callable taking a predicate builder.
-- **Cases are in decreasing precedence**: a match weighs what the first case whose predicate holds of it says, and
-  nothing if none does (an unknown result is not holding). `weight(evaluate, weights, match)` gives it.
-- **`Sample(store, weights, random)` draws the store's matches**, with replacement, each with probability proportional
-  to its weight, from the random source given: an iterator, checked when made, which reads the store at the first
-  draw.
-- Other distributions (independent cases, proportions that must sum to 1) are open; `decreasing` names the one there
-  is.
-
-## Distributions of values
-
-Built in 0.4. A distribution of a property's values, for what a distribution's cases leave open: weights over
-predicates choose a case, and distributions of values within it fill the properties.
-
-- **Distributions of values are terms**, built by builders as the algebra's are: `Uniform(lambda u: u.low(18).high(64))`
-  (ints in [low, high] when both bounds are ints, else floats in [low, high)), `Normal(lambda n:
-  n.mean(70).deviation(8))` (floats, or ints rounded half up with `.rounded()`), `Poisson(lambda p: p.rate(1.5))` and
-  `Geometric(lambda g: g.probability(0.3))` (ints, for counts), `Categorical(lambda c: c.option(3, "ann").option(1,
-  "bo"))` (values by weight) and `Mixture(lambda m: m.option(1, Normal(...)).option(2, Poisson(...)))` (distributions
-  by weight). Any other expression is a constant. Parameters are expressions, evaluated when a value is drawn, so one
-  may read what is already set or drawn (`Uniform(lambda u: u.low(wt.item.a).high(wt.item.a))`).
-- **A case draws the properties it leaves open**: `wt.weight(3).requires(...).draw(wt.person.age, Normal(...))`, an
-  `OfDraw` (`Patterns.OfDraw`) of a symbol's property and a distribution. After `.requires(...)`, the case builder gives
-  its predicate's symbols as variables; a case binds them within its draws.
-- **A distribution has a domain** (`domain(distribution)`: `int`, `float`, `str` or `bool`, or none when it cannot be
-  told without drawing), and a draw is checked against its property's type when the distribution is checked: "case 0:
-  draw 0: person.age is int, but its distribution gives float". A draw of a property the symbol's schema does not
-  have, or of something that is not a symbol's property, is refused too.
+- **`Choices` weighs alternatives**, its arms (`Patterns.OfChoices`, `Patterns.OfArm`), each a positive weight and
+  conditions, conjoined (`a.weight(3).requires(*specs)`). It holds when the number of its arms that hold satisfies its
+  count (`Patterns.OfCount`), a condition read from a function whose parameter is bound to the number, at least one by
+  default; when some arm is unknown, it holds if the count does whatever they turn out to be, and is unknown if that
+  depends on them. With `.decreasing()`, its arms are in decreasing precedence: a match falls under the first arm that
+  holds. A mixture is a choices whose arms hold distributions.
+- **A distribution of values binds a symbol** within its body to a value drawn from it (an import, in mbse-expressions'
+  terms; the symbol is bound within its parameters too): `Normal` (floats, or ints rounded half up with `.rounded()`),
+  `Uniform` (ints in [low, high] when both bounds are ints, else floats in [low, high)), `Poisson` and `Geometric` (ints,
+  for counts) and `Categorical` (values by weight, `.option(3, "ann")`, `Patterns.OfOption`). Its parameters are
+  expressions, so one may read what is already drawn. Its value reaches a property only through an equality in its
+  body, `person.age == age`. In Python, `.requires(...)` reads a function as `FromFunction` does, whose parameters are
+  the names, outer and bound; in TypeScript it calls the function with the symbol's variable, `(age) =>
+  person.age.eq(age)`, since a bundler may rename parameters.
+- **Validating data, a distribution holds when its witness is in its support**: the value its body equates the symbol
+  with (`person.age`, here) must be in the distribution's support (an int for a rounded normal, a number for a normal,
+  [low, high] or [low, high) for a uniform, an int from 0 for a Poisson or a geometric, one of a categorical's literal
+  values), and the body must hold with the symbol bound to it. It is unknown when its body has no witness.
+- **A match weighs what its arms say** (`Evaluator.weigh(rule, match)`): nothing unless the rule holds; then the
+  product, over the choices on its conjuncts (through applications), of the weight of the arm the match falls under
+  (with `decreasing`) or the sum of the weights of the arms that hold, each times what the match weighs under the
+  arm's condition.
+- **Types are checked statically**: `domain(distribution)` tells the native type a distribution gives (`int`, `float`,
+  `str`, `bool`, or none when it cannot be told), and `typing(predicate)` reports a distribution that sets a symbol's
+  property of another type ("person.age is int, but its distribution gives float"). `Constraints.check` and the
+  generators report it.
 - **Sampling stays exact**: normals by Marsaglia's polar method and Poissons by inversion need `log` and `exp`, which
   are ported after fdlibm's algorithms to both languages with only IEEE 754's exact or correctly rounded operations,
   since each language's own may differ in the last place (V8's `Math.log` differs from the port once in about a
   hundred values); Box–Muller's `cos` is avoided. A Poisson's rate over 500 is drawn as a sum of Poissons of 500, so
-  that `exp(-rate)` stays normal. The `drawn` case of the conformance corpus generates from every kind of distribution,
-  byte-identically in both languages.
-- **Cases choose, values fill** ([Generators](#generators)): a generator sets what the chosen case requires by
-  equality, draws the other properties, and redraws when the case does not hold of what it drew.
+  that `exp(-rate)` stays normal. The `drawn` case of the conformance corpus generates from every kind of
+  distribution, byte-identically in both languages.
 
 ## Pseudorandom numbers
 
@@ -250,25 +246,27 @@ from the same seed, as all output of the two implementations is, and the caller 
 
 ## Generators
 
-Built in 0.3, with draws in 0.4. `Generators.Generate(store, weights, random)` streams matches of new objects, built
-with the store's builders: a `Generation`, an iterator that counts the `steps` it has taken and the attempts it
-`rejected`. Generated data is ordinary data: transient until linked to the store's data, then validated, queried and
-serialized as any other.
+Built in 0.3 and 0.4. `Generators.Generate(store, predicate, random)` streams new matches of a predicate, built with the
+store's builders: a `Generation`, an iterator that counts the `steps` it has taken and the attempts it `rejected`.
+`Generators.Sample(store, predicate, random)` draws the store's own matches, with replacement, by what they weigh.
+Generated data is ordinary data: transient until linked to the store's data, then validated, queried and serialized
+as any other.
 
 - **Each step draws from its own stream**, `random.split(str(step))`, so a step's objects do not depend on how many
-  were drawn before it, and one seed gives the same data in both languages. The case is chosen by weight from the
-  step's stream split by `"case"`.
-- **Equalities set, draws fill**: for each symbol, an object of its schema whose properties are first those the case's
-  predicate sets with a conjunct `x.p == v` (or `v == x.p`), `v` a literal, following conjunctions and applications of
-  predicates (`settings(predicate)` gives them), and then those its draws draw, in order, each from its own stream
-  split from the attempt's by `"symbol.property"`, so that adding a draw does not change the others. A property an
-  equality sets is not drawn.
-- **What it builds must weigh what the case says**: the case must be the first whose predicate holds of the objects.
-  If it is not, the step draws again, from its stream split by `"attempt 1"`, `"attempt 2"`, ..., up to `ATTEMPTS`
-  (100) in all, and raises `ValueError` if none holds ("case 0 cannot be generated: none of its 100 attempts satisfies
-  it"); a case without draws builds the same objects every time, so it has one attempt ("case 1 cannot be generated
-  from its equalities: what they build satisfies case 0"). Rejection makes a case's draws its distributions
-  conditioned on its predicate: seniors' ages are a normal restricted to 65 and over.
+  were drawn before it, and one seed gives the same data in both languages.
+- **A step walks the rule**, through conjunctions and applications of predicates (an argument neither a symbol nor a
+  literal is evaluated for the walk): a `Choices` chooses an arm by weight, from the step's stream split by `"choices
+  <n>"`; a distribution draws a value, from the attempt's stream split by its symbol, so that adding a distribution
+  does not change the others, and the walk goes on into its body with the symbol bound to the value; an equality
+  `x.p == v` (`v` a literal or a drawn value, `x` a symbol) sets `x`'s property `p`, unless an earlier one has.
+- **What it builds must pass**: the rule must hold of the match, each arm chosen must hold, and with `decreasing` be
+  the first of its choices to hold. If not, the step draws its values again, from its stream split by `"attempt 1"`,
+  ..., keeping its arms, up to `ATTEMPTS` (100), and raises `ValueError` ("the predicate cannot be generated: none of
+  its 100 attempts satisfies it"); a rule that draws nothing has one attempt ("the predicate cannot be generated from
+  its equalities and choices: what they build does not satisfy it"). Rejection makes the draws conditioned on the
+  rule: seniors' ages are a normal restricted to 65 and over.
+- **A predicate is checked first** (`check`): its problems, its distributions' types, and parameters, which only an
+  application binds.
 
 ## Characterizers
 
@@ -291,12 +289,11 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - Asynchronous queries (`AsyncIterator`) for stores whose reads are asynchronous, in TypeScript especially.
 - Predicates over value objects: a match binds reference objects, from extents; a rule about a value object is
   written today as a rule about its owner.
-- Checking statically that what a generator draws satisfies the chosen case (a solver), rather than by rejection, and
-  drawing from a distribution truncated to the case directly.
-- Generating related objects: a case that requires links (`Exists`, `Contains`) between its symbols, or to objects the
+- Checking statically that what a generator draws satisfies the predicate (a solver), rather than by rejection, and
+  drawing from a distribution truncated to its body directly.
+- Generating related objects: a rule that requires links (`Exists`, `Contains`) between its symbols, or to objects the
   store already holds, and distributions of an adjacency's number of entries.
-- Other ways to combine cases than decreasing precedence: independent cases whose weights multiply, and proportions
-  that must sum to 1.
+- A distribution's density in `weigh`, so that sampling and characterizing weigh values, not only arms.
 - Planning inside quantifiers, and partial evaluation of rules over the algebra (Basic's reducer does not take its
   terms).
 - More shapes for the planner: hops in the other direction (from `b` to `a` through `b`'s own adjacency), equality on
@@ -314,21 +311,20 @@ entries, from a family the caller chooses (or the best of several by a criterion
   store; reading resolves the names in one.
 - Queries are this package's, not an extension in mbse-expressions; mbse-expressions keeps the rules.
 - A query streams lazily over the store's data first; standing queries come later.
-- A population is layered: weights over predicates (cases), and distributions of values within each case, as its
-  draws; a draw is checked against its property's type.
+- A pattern is a predicate: weighted alternatives (`Choices`) and distributions of values are terms of its rule, as
+  any condition is; a distribution binds a symbol, and its body's equalities set properties; an unreleased draft's
+  separate distributions of cases and draws were dropped for it, and `Choices` replaced 0.3's `Choice`.
 - Generated data is byte-identical across implementations from a seed.
 - A random source is given to whatever draws from it (`Stores.Random`, in mbse-schemas), not held by a store, which
   is data access alone; PCG32 is the reference source, and streams split by key from the seed, not from what was
   drawn.
 - Mandatory, possible and forbidden links are predicates: quantifiers over extents (`Exists`, `Forall`) are terms of a
   `Predicates` dialect extending Basic, links are tested by `Contains` (Basic's `any` over `entries`), and "possible"
-  is a weighted disjunction (`Choice`) of the alternatives, which validation reads as their disjunction and generators
-  as their weights.
+  is weighted alternatives (`Choices`), which validation reads by their count and generators by their weights.
 - The algebra follows the builder precedent of mbse-schemas: each term is a data class with a builder, built from a
   spec (data, or a callable taking the builder), and a predicate's conditions are added by `.requires(...)` and
   `.forbids(...)`; there are no writer functions of the package's own.
-- A distribution is weighted cases of predicates (`Distributions.OfWeights`), in decreasing precedence; its cases use
-  predicates by reference or inline, never by name.
+- Predicates are used by reference or inline, never by name.
 - A predicate is used by reference: it is a term of the algebra, and applying it (`HasName(person, "alice")`) is a term
   that holds the predicate itself as its first argument, so a predicate used in several places is one object, written
   once. Predicates take parameters, as property specs, bound by applying them.

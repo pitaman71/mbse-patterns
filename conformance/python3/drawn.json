@@ -79,7 +79,7 @@
     },
     "s1": {
       "name": "ann",
-      "age": 69,
+      "age": 79,
       "directories": [
         {
           "directory": {
@@ -90,54 +90,6 @@
       ]
     },
     "s2": {
-      "name": "bo",
-      "age": 69,
-      "directories": [
-        {
-          "directory": {
-            "$ref": "s0",
-            "$schema": "Directory"
-          }
-        }
-      ]
-    },
-    "s3": {
-      "name": "cy",
-      "age": 27,
-      "directories": [
-        {
-          "directory": {
-            "$ref": "s0",
-            "$schema": "Directory"
-          }
-        }
-      ]
-    },
-    "s4": {
-      "name": "bo",
-      "age": 81,
-      "directories": [
-        {
-          "directory": {
-            "$ref": "s0",
-            "$schema": "Directory"
-          }
-        }
-      ]
-    },
-    "s5": {
-      "name": "cy",
-      "age": 26,
-      "directories": [
-        {
-          "directory": {
-            "$ref": "s0",
-            "$schema": "Directory"
-          }
-        }
-      ]
-    },
-    "s6": {
       "name": "cy",
       "age": 36,
       "directories": [
@@ -149,9 +101,9 @@
         }
       ]
     },
-    "s7": {
-      "name": "bo",
-      "age": 68,
+    "s3": {
+      "name": "ann",
+      "age": 75,
       "directories": [
         {
           "directory": {
@@ -161,9 +113,9 @@
         }
       ]
     },
-    "s8": {
+    "s4": {
       "name": "cy",
-      "age": 53,
+      "age": 1,
       "directories": [
         {
           "directory": {
@@ -173,7 +125,19 @@
         }
       ]
     },
-    "s9": {
+    "s5": {
+      "name": "cy",
+      "age": 37,
+      "directories": [
+        {
+          "directory": {
+            "$ref": "s0",
+            "$schema": "Directory"
+          }
+        }
+      ]
+    },
+    "s6": {
       "name": "cy",
       "age": 27,
       "directories": [
@@ -185,9 +149,45 @@
         }
       ]
     },
+    "s7": {
+      "name": "cy",
+      "age": 1,
+      "directories": [
+        {
+          "directory": {
+            "$ref": "s0",
+            "$schema": "Directory"
+          }
+        }
+      ]
+    },
+    "s8": {
+      "name": "bo",
+      "age": 72,
+      "directories": [
+        {
+          "directory": {
+            "$ref": "s0",
+            "$schema": "Directory"
+          }
+        }
+      ]
+    },
+    "s9": {
+      "name": "ann",
+      "age": 71,
+      "directories": [
+        {
+          "directory": {
+            "$ref": "s0",
+            "$schema": "Directory"
+          }
+        }
+      ]
+    },
     "s10": {
       "name": "cy",
-      "age": 57,
+      "age": 59,
       "directories": [
         {
           "directory": {
@@ -199,7 +199,7 @@
     },
     "s11": {
       "name": "cy",
-      "age": 2,
+      "age": 3,
       "directories": [
         {
           "directory": {
@@ -210,8 +210,8 @@
       ]
     },
     "s12": {
-      "name": "ann",
-      "age": 66,
+      "name": "cy",
+      "age": 30,
       "directories": [
         {
           "directory": {

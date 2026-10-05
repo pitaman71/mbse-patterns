@@ -35,9 +35,8 @@ callable taking the builder):
 - `Contains(c.phones, lambda e: e.phone == p)`: whether one of `c`'s entries in its adjacency `phones` satisfies the
   condition, read from the function, with its parameter bound to the entry: the targets of the entry's other links, and
   its property values, by name. It is Basic's `any` over `entries(c, 'phones')`;
-- `Choice(lambda ch: ch.option(0.35, spec).option(0.65, spec))`: a weighted disjunction, which holds when any of its
-  options holds; the weights, positive and summing to 1, are how often a generator chooses each option, and what a
-  characterizer estimates;
+- `Distributions.Choices` and the distributions of values (`Distributions.Normal`, ...): weighted alternatives, and
+  values drawn, which say how matches are distributed (see `Distributions`);
 - `OfSet`: predicates, gathered in order.
 
 A quantifier ranges over its schema's extent in the store (its `extent` term: what the store's singletons reach).
@@ -60,11 +59,13 @@ from typing import Any
 
 from mbse.Expressions import Domains as BasicDomains, Evaluators as Basic, Expressions as E
 from mbse.Expressions.Dialects.Python import Text
-from mbse.Expressions.Framework import Evaluators as F, Terms
+from mbse.Expressions.Framework import Evaluators as F, Symbolics, Terms
 from mbse.Schemas.Framework import Modules, Schemas, Stores
 
-__all__ = ["DIALECT", "OfPredicate", "OfApply", "OfSet", "Exists", "Forall", "Contains", "Choice", "Evaluator",
-           "holds", "OfExtent", "OfForall", "OfExists", "OfChoice", "OfOption", "SYMBOLS", "PARAMETERS", "PREDICATE",
+from . import Distributions
+
+__all__ = ["DIALECT", "OfPredicate", "OfApply", "OfSet", "Exists", "Forall", "Contains", "Evaluator",
+           "holds", "OfExtent", "OfForall", "OfExists", "SYMBOLS", "PARAMETERS", "PREDICATE",
            "SET", "resolving", "Declaring"]
 
 PREDICATE, SET = "Patterns.Predicate", "Patterns.Set"
@@ -174,43 +175,6 @@ class OfExists(_Quantified):
 
 
 @dataclass(eq=False)
-class OfOption(Terms.Term):
-    """An option of a choice: its predicate, and its weight."""
-
-    KIND = "option"
-    ROLE = Terms.APPLICATION
-    PROPERTIES = {"weight": float}
-    SLOTS = ("body",)
-    weight: float | None = None
-    body: Any = None
-
-    def check(self) -> list[str]:
-        if type(self.weight) is float and not (self.weight > 0 and math.isfinite(self.weight)):
-            return [f"an option's weight must be positive, got {self.weight!r}"]
-        return []
-
-
-@dataclass(eq=False)
-class OfChoice(Terms.Term):
-    """A weighted disjunction of options: it holds when any of them holds."""
-
-    KIND = "choice"
-    ROLE = Terms.APPLICATION
-    VARIADIC = "options"
-    options: tuple[Any, ...] = ()
-
-    def check(self) -> list[str]:
-        if not all(isinstance(option, OfOption) for option in self.options):
-            return ["a choice's arguments are options"]
-        if not self.options:
-            return ["a choice needs an option"]
-        weights = [option.weight for option in self.options]
-        if all(type(w) is float for w in weights) and abs(sum(weights) - 1) > 1e-9:
-            return [f"a choice's weights must sum to 1, got {sum(weights)!r}"]
-        return []
-
-
-@dataclass(eq=False)
 class OfPredicate(Terms.Term):
     """A rule over symbols and parameters, which it binds within the rule. Calling it, `predicate(*arguments)`, applies
     it: see `OfApply`."""
@@ -311,12 +275,12 @@ class _QuantifiedBuilder(Terms.Builder, Declaring):
                 self.set("name", name).argument("collection", OfExtent(_schema_name(schema)))
         return self
 
-    def requires(self, spec: Any) -> Any:
-        self._conditions.append(DIALECT.resolve(spec))
+    def requires(self, *specs: Any) -> Any:
+        self._conditions += [DIALECT.resolve(spec) for spec in specs]
         return self
 
-    def forbids(self, spec: Any) -> Any:
-        self._conditions.append(_negation(spec))
+    def forbids(self, *specs: Any) -> Any:
+        self._conditions += [_negation(spec) for spec in specs]
         return self
 
     def _fold(self) -> None:
@@ -350,27 +314,6 @@ class _ForallBuilder(_QuantifiedBuilder):
 
 class _ExistsBuilder(_QuantifiedBuilder):
     _data = OfExists
-
-
-class _ChoiceBuilder(Terms.Builder):
-    """Builds a choice. DSL: `.option(weight, spec)` adds an option."""
-
-    _data = OfChoice
-
-    def option(self, weight: float, spec: Any) -> _ChoiceBuilder:
-        return self.arguments(OfOption(float(weight), DIALECT.resolve(spec)))
-
-
-class _OptionBuilder(Terms.Builder):
-    """Builds an option. DSL: `.weight(float)` and `.body(spec)`."""
-
-    _data = OfOption
-
-    def weight(self, weight: float) -> _OptionBuilder:
-        return self.set("weight", float(weight))
-
-    def body(self, spec: Any) -> _OptionBuilder:
-        return self.argument("body", spec)
 
 
 class _ExtentBuilder(Terms.Builder):
@@ -418,14 +361,14 @@ class _PredicateBuilder(Terms.Builder, Declaring):
             self._parameters[built.name] = built.type
         return self
 
-    def requires(self, spec: Any) -> _PredicateBuilder:
-        """Adds a condition: a spec of the algebra whose free names are the symbols and parameters."""
-        self._conditions.append(DIALECT.resolve(spec))
+    def requires(self, *specs: Any) -> _PredicateBuilder:
+        """Adds conditions: specs of the algebra whose free names are the symbols and parameters."""
+        self._conditions += [DIALECT.resolve(spec) for spec in specs]
         return self
 
-    def forbids(self, spec: Any) -> _PredicateBuilder:
-        """Adds the condition that `spec` does not hold."""
-        self._conditions.append(_negation(spec))
+    def forbids(self, *specs: Any) -> _PredicateBuilder:
+        """Adds the conditions that each of `specs` does not hold."""
+        self._conditions += [_negation(spec) for spec in specs]
         return self
 
     def _fold(self, made: Any) -> Any:
@@ -461,9 +404,9 @@ class _SetBuilder(Terms.Builder):
         return self.arguments(*map(OfPredicate.resolve, specs))
 
 
-_KINDS = (OfExtent, OfForall, OfExists, OfChoice, OfOption, OfPredicate, OfApply, OfSet)
-_BUILDERS = (_ExtentBuilder, _ForallBuilder, _ExistsBuilder, _ChoiceBuilder, _OptionBuilder, _PredicateBuilder,
-             Terms.Builder, _SetBuilder)
+_KINDS = (OfExtent, OfForall, OfExists, OfPredicate, OfApply, OfSet, *Distributions.KINDS)
+_BUILDERS = (_ExtentBuilder, _ForallBuilder, _ExistsBuilder, _PredicateBuilder, Terms.Builder, _SetBuilder,
+             *Distributions.BUILDERS)
 _NAMES = {"predicate": PREDICATE, "set": SET}
 
 DIALECT = Terms.Declared(
@@ -488,11 +431,6 @@ def Forall(spec: Any) -> OfForall:
     return Terms.resolve(spec, OfForall, _ForallBuilder, "a forall")
 
 
-def Choice(spec: Any) -> OfChoice:
-    """A weighted disjunction: `Choice(lambda ch: ch.option(0.35, p).option(0.65, q))` holds when `p` or `q` does."""
-    return Terms.resolve(spec, OfChoice, _ChoiceBuilder, "a choice")
-
-
 def Contains(adjacency: Any, condition: Callable[[Any], Any]) -> E.OfQuantifier.Data:
     """Whether one of an object's entries in an adjacency, written `c.phones`, satisfies `condition`, a function of one
     entry read as `Python.Text.FromFunction` reads it: Basic's `any(e in entries(c, 'phones'), ...)`."""
@@ -510,17 +448,50 @@ def Contains(adjacency: Any, condition: Callable[[Any], Any]) -> E.OfQuantifier.
 # --- Evaluation ---
 
 
-class Evaluator:
-    """Evaluates predicates over `store`: Basic's rules, with extents from the store and applications of predicates.
-    Extents are read once per evaluator, so an evaluator sees the store as it was when first asked."""
+def _in(drawn: Any, value: Any, parameter: Callable[[str], Any]) -> bool:
+    """Whether `value` is in a distribution's support, its parameters given by `parameter(name)`."""
+    if isinstance(drawn, Distributions.Normal):
+        return type(value) is int if drawn.rounded else type(value) in (int, float) and math.isfinite(value)
+    if isinstance(drawn, Distributions.Uniform):
+        low, high = parameter("low"), parameter("high")
+        if type(low) is int and type(high) is int:
+            return type(value) is int and low <= value <= high
+        return type(value) in (int, float) and low <= value < high
+    if isinstance(drawn, (Distributions.Poisson, Distributions.Geometric)):
+        return type(value) is int and value >= 0
+    return any(type(value) is type(option.value.value) and value == option.value.value for option in drawn.options
+               if isinstance(option.value, E.OfLiteral.Data))
 
-    def __init__(self, store: Stores.Store, dialect: Terms.Declared | None = None):
+
+class _Interpreter(F.Interpreter):
+    """Basic's interpreter, which also evaluates the distributions' binding forms itself."""
+
+    def evaluate(self, expression: Any, scope: Any, active: set[int]) -> Any:
+        if not isinstance(expression, Distributions.DRAWN):
+            return super().evaluate(expression, scope, active)
+        witness = Distributions.witness(expression)
+        value = None if witness is None else self.evaluate(witness, scope, active)
+        if value is None:
+            return None
+        if not _in(expression, value, lambda name: self.evaluate(getattr(expression, name), scope, active)):
+            return False
+        return self.evaluate(expression.body, scope.bind(expression.symbol, value), active)
+
+
+class Evaluator:
+    """Evaluates predicates over `store`: Basic's rules, with extents from the store, applications of predicates,
+    choices (whether the number of arms that hold satisfies their count) and distributions (whether the value their
+    body equates their symbol with is in their support, and the body holds with it). Extents are read once per
+    evaluator, so an evaluator sees the store as it was when first asked."""
+
+    def __init__(self, store: Stores.Store):
         self.store = store
         self._extents: dict[str, tuple[Any, ...]] = {}
-        self.interpreter = F.Interpreter(dialect or DIALECT, {
+        self.observe: dict[int, list[bool | None]] | None = None  # when given, how each choices' arms held, by id
+        self.interpreter = _Interpreter(DIALECT, {
             "operation": Basic.OPERATIONS, "quantifier": Basic.QUANTIFIERS,
             "extent": self._extent, "forall": Basic.QUANTIFIERS["all"], "exists": Basic.QUANTIFIERS["any"],
-            "choice": _choice, "option": lambda thunks, node, scope: thunks[0](), "apply": self._apply,
+            "apply": self._apply, "choices": self._choices,
         }, typed=BasicDomains.Value)
 
     def __call__(self, expression: Any, variables: Mapping[str, Any] | None = None) -> Any:
@@ -541,19 +512,44 @@ class Evaluator:
         values = [thunk() for thunk in thunks[1:]]
         return self.interpreter(predicate.rule, dict(zip(predicate.binds(), values)))
 
+    def held(self, node: Distributions.Choices, scope: Any) -> list[bool | None]:
+        """Whether each of a choices' arms holds, in order."""
+        return [_truth(self.interpreter.evaluate(arm.condition, scope, set())) for arm in node.arms]
 
-def _choice(thunks: Any, node: OfChoice, scope: Any) -> bool | None:
-    """Kleene's disjunction of the options."""
-    unknown = False
-    for thunk in thunks:
-        value = thunk()
-        if value is True:
-            return True
-        if value is None:
-            unknown = True
-        elif value is not False:
-            raise TypeError(f"a choice's options must be bools, got {type(value).__name__}")
-    return None if unknown else False
+    def _choices(self, thunks: Any, node: Distributions.Choices, scope: Any) -> bool | None:
+        held = self.held(node, scope)
+        if self.observe is not None:
+            self.observe[id(node)] = held
+        count, least = node.count, held.count(True)
+        found = {_truth(self.interpreter.evaluate(count.condition, scope.bind(count.name, n), set()))
+                 for n in range(least, least + held.count(None) + 1)}  # every count the unknown arms allow
+        return found.pop() if len(found) == 1 else None
+
+    def weigh(self, rule: Any, scope: Mapping[str, Any]) -> float:
+        """What a match weighs under a rule: 0.0 unless the rule holds; then the product, over the choices on its
+        conjuncts, of the weight of the arm the match falls under (the first that holds, with `decreasing`) or the sum
+        of those of the arms that hold, each times what the match weighs under the arm's condition."""
+        variables = Symbolics.Variables(dict(scope))
+        return self._weigh(DIALECT.resolve(rule), variables) if self.interpreter.evaluate(
+            DIALECT.resolve(rule), variables, set()) is True else 0.0
+
+    def _weigh(self, node: Any, scope: Any) -> float:
+        if isinstance(node, E.OfOperation.Data) and node.name == "and" and len(node.arguments) == 2:
+            return self._weigh(node.arguments[0], scope) * self._weigh(node.arguments[1], scope)
+        if isinstance(node, OfApply):
+            values = [self.interpreter.evaluate(argument, scope, set()) for argument in node.arguments]
+            return self._weigh(node.predicate.rule, Symbolics.Variables(dict(zip(node.predicate.binds(), values))))
+        if isinstance(node, Distributions.Choices):
+            weights = [arm.weight * self._weigh(arm.condition, scope)
+                       for arm, holds in zip(node.arms, self.held(node, scope)) if holds is True]
+            return (weights[0] if weights else 0.0) if node.decreasing else sum(weights)
+        return 1.0
+
+
+def _truth(value: Any) -> bool | None:
+    if value is not None and type(value) is not bool:
+        raise TypeError(f"a predicate must be a bool, got {type(value).__name__}")
+    return value
 
 
 def holds(evaluate: Evaluator, rule: Any, scope: Mapping[str, Any]) -> bool | None:

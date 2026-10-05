@@ -47,8 +47,9 @@ const HasAPhone = Predicates.Exists((q) => q.symbols({ p: Phone }).requires(owns
 const EveryoneHasAPhone = new Predicates.OfPredicate.Builder().name("EveryoneHasAPhone") // no symbols: a statement about the store
   .requires(Predicates.Forall((q) => q.symbols({ c: Contact }).requires(HasAPhone))).create();
 const Phoneless = new Predicates.OfPredicate.Builder().name("Phoneless").symbols({ c: Contact }).forbids(HasAPhone).create();
-const Sometimes = new Predicates.OfPredicate.Builder().name("Sometimes").symbols({ c: Contact }).requires(Predicates.Choice(
-  (ch) => ch.option(0.35, HasAPhone).option(0.65, E.operation("not", HasAPhone)))).create();
+const Sometimes = new Predicates.OfPredicate.Builder().name("Sometimes").symbols({ c: Contact }).requires(
+  new Distributions.Choices.Builder().arms((a) => a.weight(0.35).requires(HasAPhone),
+    (a) => a.weight(0.65).requires(E.operation("not", HasAPhone))).create()).create();
 
 // The store's data is what its singleton directory reaches.
 const ann = store.Contact().name("Ann").age(30n).phones((x: any) => x.phone((q: any) => q.number("555-0100"))).create();
@@ -81,19 +82,19 @@ check(same(query.explain(numbered), ["c: scan Contact", "p: c.phones to phone, a
 check(same([...query.select(numbered)].map((m: any) => [m.c.name, m.p.number]), [["Ann", "555-0100"]]), "numbered");
 check([...query.select(IsAnAdult, null, true)].length === 2, "with unknown");
 
-// Parameters: a predicate applied by reference, to a symbol and a value. Distributions weigh cases of predicates, given
-// by reference or inline, in decreasing precedence, and each case draws what it leaves open from distributions of
-// values; a generator builds new data from them, from a seed, redrawing until each case holds.
+// Parameters: a predicate applied by reference, to a symbol and a value. A pattern is a predicate: choices weigh its
+// alternatives, and distributions bind values its equalities set; a generator builds new data from it, from a seed,
+// redrawing until it holds.
 const HasName = new Predicates.OfPredicate.Builder().name("HasName").symbols({ person: Contact })
   .parameters((x) => x.name("name")).requires(E.variable("person").name.eq(E.variable("name"))).create();
-const APerson = { person: Contact };
-const Names = new Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
-  (wt) => wt.weight(3).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Cy")))
-    .draw(wt.person.age, Distributions.Uniform((u) => u.low(18n).high(64n))), // ints, 18 to 64
-  (wt) => wt.weight(1).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Di"))
-    .requires(pred.person.age.ge(65n))) // drawn again until 65 or over
-    .draw(wt.person.age, Distributions.Normal((n) => n.mean(70n).deviation(8n).rounded()))).create();
-const generated = Generators.Generate(store, Names, new Stores.PCG32(42n)); // new contacts, as the cases say
+const [APerson, person] = [{ person: Contact }, E.variable("person")];
+const Names = new Predicates.OfPredicate.Builder().name("Names").symbols(APerson).requires(new Distributions.Choices.Builder().arms(
+  (a) => a.weight(3).requires(HasName.call(person, "Cy"), new Distributions.Uniform.Builder().symbol("age").low(18n).high(64n)
+    .requires((age) => person.age.eq(age)).create()), // ints, 18 to 64
+  (a) => a.weight(1).requires(HasName.call(person, "Di"), new Distributions.Normal.Builder().symbol("age").mean(70n).deviation(8n)
+    .rounded().requires((age) => person.age.eq(age)).create(), person.age.ge(65n)), // drawn again until 65 or over
+).decreasing().create()).create();
+const generated = Generators.Generate(store, Names, new Stores.PCG32(42n)); // new contacts, as the arms say
 const people = Array.from({ length: 400 }, () => (generated.next().value as any).person);
 const cy = people.filter((x) => x.name === "Cy").length;
 check(new Set(people.map((x) => x.name)).size === 2 && cy > 250 && cy < 350, "generated"); // about 3 to 1
@@ -115,5 +116,8 @@ check(people.every((x) => x.name === "Cy" ? x.age >= 18n && x.age <= 64n : x.age
   `AttributeError`.
 - Seeds and random words are `bigint`s (`new Stores.PCG32(42n)`), and weights are numbers: there is no `int` weight
   to refuse.
+- A distribution's `.requires(...)` calls a function with the variable of its own symbol, `(age) => person.age.eq(age)`,
+  outer names coming from the closure, where Python reads `lambda person, age: person.age == age`; a bundler may
+  rename a parameter that shadows an outer name, so TypeScript does not read the names.
 - `select(predicate, variables, unknown)` takes `unknown` by position (`null` for no variables), and returns a
   generator: `next()` gives `{ value, done }`.

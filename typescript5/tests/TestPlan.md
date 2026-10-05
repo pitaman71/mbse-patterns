@@ -13,3 +13,5 @@ only what differs. The deliberate differences between the implementations are in
   CON-07 applies predicates with `.call(...)`.
 - GEN-01 refuses an infinite weight, as Python does, and has no `int` weight to refuse; random words and bounds are
   `bigint`s.
+- DST-03 refuses a function in a distribution's `.requires(...)` before its symbol is set, since TypeScript calls the
+  function with the symbol's variable; Python reads the function's parameters instead.

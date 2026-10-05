@@ -50,7 +50,7 @@ class OfStore(Bindings.OfStore):
     symbols' schemas by name in `store`: what snapshots of them are read into, and written from."""
 
     def __init__(self, store: Stores.Store):
-        super().__init__([(kind.Schema, _bound(kind, store)) for kind in Distributions.DIALECT.classes],
+        super().__init__([(kind.Schema, _bound(kind, store)) for kind in Predicates.DIALECT.classes],
                          [Terms.Arguments])
 
 
@@ -62,7 +62,7 @@ schemas are inline."""
 def register(store: Any) -> Any:
     """Registers the meta-schemas of predicates, sets and distributions, and the algebra's (Basic's included), in
     `store` (e.g. a `Proxies.OfStore`), skipping those it already holds. Returns the store."""
-    return Distributions.DIALECT.register(store)
+    return Predicates.DIALECT.register(store)
 
 
 def check(predicates: Iterable[Any] | Predicates.OfSet) -> Predicates.OfSet:
@@ -76,6 +76,7 @@ def check(predicates: Iterable[Any] | Predicates.OfSet) -> Predicates.OfSet:
         if predicate.name is None:
             problems.append(f"{label}: a predicate of a set needs a name")
         problems += [f"{label}: {problem}" for problem in Predicates.DIALECT.validate(predicate, core=True)]
+        problems += [f"{label}: {problem}" for problem in Distributions.typing(predicate)]
         if predicate.name in seen:
             problems.append(f"{label}: defined twice")
         seen.add(predicate.name)

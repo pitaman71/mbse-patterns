@@ -30,10 +30,11 @@ HasAPhone = (
 )
 ```
 
-`Validators` checks data against predicates; `Queries` finds a store's matches for a predicate. `Distributions` weigh
-matches by cases of predicates; `Distributions.Sample` draws from a store's data and `Generators.Generate` builds new
-data, both from a random source the caller gives, byte-identically in both languages from a seed. Python imports
-`mbse.Patterns`, TypeScript `@mbse/patterns`.
+`Validators` checks data against predicates; `Queries` finds a store's matches for a predicate. A pattern is a
+predicate whose rule weighs alternatives (`Distributions.Choices`) and draws values (`Distributions.Normal`, ...);
+`Generators.Sample` draws from a store's data and `Generators.Generate` builds new data, both from a random source the
+caller gives, byte-identically in both languages from a seed. Python imports `mbse.Patterns`, TypeScript
+`@mbse/patterns`.
 
 ## When to use it
 
@@ -58,8 +59,8 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
 4. **Queries see the store's data, not everything built.** A schema's extent is what the store's singletons reach.
 5. **Links are predicates.** `Predicates.Exists` and `Forall` quantify over a schema's objects, built by a builder with
    `.symbols(...)`, `.requires(...)` and `.forbids(...)`; `Contains(c.phones, lambda e: e.phone == p)` tests an
-   adjacency's entries; `Choice(lambda ch: ch.option(0.35, a).option(0.65, b))` is weighted. Mandatory, forbidden and
-   possible links are predicates, and a predicate without symbols is a statement about the whole store.
+   adjacency's entries. Mandatory, forbidden and possible links are predicates, and a predicate without symbols is a
+   statement about the whole store.
 6. **Shape the rule for the planner.** Each `.requires(...)` is a conjunct, tested as early as its symbols allow, and
    `Contains(c.phones, lambda e: e.phone == p)` between two symbols takes `p` from `c`'s entries instead of scanning;
    `explain` shows the plan. Relations' `unique` clauses tell it when such a hop gives at most one object.
@@ -69,10 +70,11 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
    `HasName(pred.person, "alice")` holds the predicate itself and binds its symbols, then its parameters, in order.
    Shared predicates are written once. A validator refuses a predicate with parameters; a query takes them as
    variables.
-9. **A distribution's cases are in decreasing precedence**: a match weighs what the first case whose predicate holds
-   says. A generator chooses a case by weight, sets what its predicate requires by equality, draws the rest from the
-   case's `.draw(wt.person.age, Normal(...))`s, and redraws until the case is the first to hold; a draw must give its
-   property's type. Sampling and generating take a random source (`Stores.PCG32(seed)`).
+9. **A pattern is a predicate.** `Distributions.Choices` weighs alternatives, its arms (`a.weight(3).requires(...)`),
+   holding when the number of arms that hold satisfies its count; `.decreasing()` makes a match fall under the first
+   arm that holds. A distribution of values (`Distributions.Normal.Builder().symbol("age")...requires(lambda person,
+   age: person.age == age)`) binds a symbol to a drawn value that its body's equalities set. `Generators.Generate` and
+   `Generators.Sample` draw from such a predicate with a random source (`Stores.PCG32(seed)`).
 10. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`, and
    `Contains` calls its condition with a variable: `(e) => e.phone.eq(p)`), a predicate is applied with
    `.call(...)`, and a validator's options are an object (`{ unknown: "ignore" }`).

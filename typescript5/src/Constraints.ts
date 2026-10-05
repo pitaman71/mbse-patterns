@@ -40,7 +40,7 @@ function bound(kind: Terms.TermClass, store: Stores.Store): (instance?: unknown)
  * symbols' schemas by name in `store`: what snapshots of them are read into, and written from. */
 export class OfStore extends Bindings.OfStore {
   constructor(store: Stores.Store) {
-    super(Distributions.DIALECT.classes.map((kind) => [kind.Schema, bound(kind, store)] as const), [Terms.Arguments]);
+    super(Predicates.DIALECT.classes.map((kind) => [kind.Schema, bound(kind, store)] as const), [Terms.Arguments]);
   }
 }
 
@@ -51,7 +51,7 @@ export const Builders = new OfStore(new Stores.Catalog() as unknown as Stores.St
 /** Registers the meta-schemas of predicates, sets and distributions, and the algebra's (Basic's included), in `store`
  * (e.g. a `Proxies.OfStore`), skipping those it already holds. Returns the store. */
 export function register<S extends Stores.Store & { register(schema: never): void }>(store: S): S {
-  return Distributions.DIALECT.register(store);
+  return Predicates.DIALECT.register(store);
 }
 
 /** A set of `predicates`, each a predicate or a callable taking a predicate builder, throwing `ValueError` with every
@@ -64,6 +64,7 @@ export function check(predicates: Iterable<Predicates.OfPredicate.Spec> | Predic
     const label = `predicate ${repr(predicate.name)}`;
     if (predicate.name === null) problems.push(`${label}: a predicate of a set needs a name`);
     problems.push(...Predicates.DIALECT.validate(predicate, { core: true }).map((problem) => `${label}: ${problem}`));
+    problems.push(...Distributions.typing(predicate).map((problem) => `${label}: ${problem}`));
     if (seen.has(predicate.name)) problems.push(`${label}: defined twice`);
     seen.add(predicate.name);
   }

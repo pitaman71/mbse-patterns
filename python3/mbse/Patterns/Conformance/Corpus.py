@@ -52,24 +52,26 @@ def build():
         lambda b: b.name("Mandatory").requires(P.Forall(lambda q: q.symbols({"c": Contact}).requires(owns))),
         lambda b: b.name("Forbidden").symbols({"c": Contact}).forbids(owns),
         lambda b: b.name("Possible").symbols({"c": Contact}).requires(
-            P.Choice(lambda ch: ch.option(0.35, owns).option(0.65, E.operation("not", owns)))),
+            D.Choices.Builder().arms(lambda a: a.weight(0.35).requires(owns),
+                                     lambda a: a.weight(0.65).requires(E.operation("not", owns))).create()),
         lambda b: b.name("Unnumbered").requires(P.Exists(lambda q: q.symbols({"c": Contact, "p": Phone})
                                                          .requires(P.Contains(c.phones, lambda e: e.phone == p))
                                                          .forbids(p.has("number")))),
     ).create()
 
-    # --- weights: weighted cases in decreasing precedence, inline predicates applying one predicate, written once ---
+    # --- weights: a predicate whose choices weigh names, in decreasing precedence, each applying one predicate ---
     APerson = {"person": Contact}
+    person = E.variable("person")
     HasName = P.OfPredicate.Builder().name("HasName").symbols(APerson).parameters(lambda p: p.name("name")).requires(
-        E.variable("person").name.eq(E.variable("name"))).create()
-    weights = D.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
-        lambda wt: wt.weight(10).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "alice"))),
-        lambda wt: wt.weight(5).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "ben"))),
-        lambda wt: wt.weight(15).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "chermon"))),
-        lambda wt: wt.weight(7).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "davi"))),
-    ).create()
+        person.name.eq(E.variable("name"))).create()
+    weights = P.OfPredicate.Builder().name("Names").symbols(APerson).requires(D.Choices.Builder().arms(
+        lambda a: a.weight(10).requires(HasName(person, "alice")),
+        lambda a: a.weight(5).requires(HasName(person, "ben")),
+        lambda a: a.weight(15).requires(HasName(person, "chermon")),
+        lambda a: a.weight(7).requires(HasName(person, "davi")),
+    ).decreasing().create()).create()
 
-    # --- generated: twelve contacts generated from the weights, from the seed 42, listed in a directory ---
+    # --- generated: twelve contacts generated from the names, from the seed 42, listed in a directory ---
     book = Proxies.OfStore()
     for schema in (Contact, Phone, Phones, Listed, Directory):
         book.register(schema)
@@ -79,17 +81,21 @@ def build():
         contact = next(generated)["person"]
         book.Directory(directory).contacts(lambda e, contact=contact: e.contact(contact)).update()
 
-    # --- drawn: cases whose draws fill what their predicates leave open, from every kind of distribution, and twelve
+    # --- drawn: choices whose arms draw values from every kind of distribution, one nested as a mixture, and twelve
     #     contacts generated from them, from the seed 7 ---
-    drawing = D.OfWeights.Builder().name("People").symbols(APerson).decreasing(
-        lambda wt: wt.weight(1).requires(lambda pred: pred.symbols(APerson).requires(pred.person.age.ge(65)))
-        .draw(wt.person.age, D.Normal(lambda n: n.mean(70).deviation(8).rounded()))
-        .draw(wt.person.name, D.Categorical(lambda c: c.option(3, "ann").option(1, "bo"))),
-        lambda wt: wt.weight(3).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "cy")))
-        .draw(wt.person.age, D.Mixture(lambda m: m.option(1, D.Uniform(lambda u: u.low(18).high(64)))
-                                       .option(1, D.Poisson(lambda p: p.rate(30)))
-                                       .option(1, D.Geometric(lambda g: g.probability(0.05))))),
-    ).create()
+    def aged(distribution):
+        return distribution.symbol("age").requires(person.age.eq(E.variable("age"))).create()
+
+    drawing = P.OfPredicate.Builder().name("People").symbols(APerson).requires(D.Choices.Builder().arms(
+        lambda a: a.weight(1).requires(
+            aged(D.Normal.Builder().mean(70).deviation(8).rounded()), person.age.ge(65),
+            D.Categorical.Builder().symbol("name").option(3, "ann").option(1, "bo").requires(
+                person.name.eq(E.variable("name"))).create()),
+        lambda a: a.weight(3).requires(HasName(person, "cy"), D.Choices.Builder().arms(
+            lambda m: m.weight(1).requires(aged(D.Uniform.Builder().low(18).high(64))),
+            lambda m: m.weight(1).requires(aged(D.Poisson.Builder().rate(30))),
+            lambda m: m.weight(1).requires(aged(D.Geometric.Builder().probability(0.05)))).create()),
+    ).decreasing().create()).create()
     drawn = Proxies.OfStore()
     for schema in (Contact, Phone, Phones, Listed, Directory):
         drawn.register(schema)
@@ -103,7 +109,7 @@ def build():
         "predicates": (C.OfSet.Schema, predicates, store),
         "empty": (C.OfSet.Schema, empty, store),
         "algebra": (C.OfSet.Schema, algebra, store),
-        "weights": (D.OfWeights.Schema, weights, store),
+        "weights": (P.OfPredicate.Schema, weights, store),
         "generated": (Directory, directory, book),
         "drawn": (Directory, listing, drawn),
     }
