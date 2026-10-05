@@ -1,65 +1,37 @@
 /**
- * Constraints: predicates over a schema's objects, kept as data beside the schemas.
+ * Constraints: sets of predicates, kept as data beside the schemas.
  *
- * A predicate is a named Basic rule over symbols, each bound to an object of a schema; it applies to a *match*, a
- * binding of every symbol to an object of its schema. It is built as schemas are, by a fluent builder finalized by
- * `create()`, `clone()` or `update()`:
+ * A set, `OfSet`, gathers predicates (see `Predicates`) in order, and is built as they are, by a fluent builder:
+ * `new OfSet.Builder().predicates(HasAPhone, (p) => p.name(...)...)`. Nothing validates until asked: `validate()`
+ * reports each predicate's problems (a missing name or rule, a symbol whose schema is not a named reference object
+ * schema, the rule's problems as a rule of the algebra whose free names are the symbols) and two predicates with one
+ * name; `check` throws with them.
  *
- *     const IsAnAdult = new Constraints.OfPredicate.Builder()
- *       .name("IsAnAdult")
- *       .description("18 or older")
- *       .symbols({ the: Contact })
- *       .rule(E.variable("the").age.ge(18n))
- *       .create();
- *
- * `.rule(spec)` takes any spec of the predicate algebra (`Predicates`, which extends Basic): data or a writer. A predicate
- * without symbols is a statement about the whole store, e.g. that every contact has a phone. A set, `OfSet`, gathers predicates in order:
- * `new OfSet.Builder().predicates(IsAnAdult, (p) => p.name(...)...)`. Nothing validates until asked: `validate()`
- * reports a missing name or rule, a symbol whose schema is not a named reference object schema, the rule's problems as a
- * rule of the algebra whose free names are the symbols, and, in a set, two predicates with one name.
- *
- * Predicates and sets are mbse-schemas reference objects with meta-schemas (`Patterns.Predicate`, `Patterns.Set`), so
- * a set is stored and sent like any data. A symbol's schema is written as a property's type is: by its name, or
- * inline; a predicate is its rule's parent through Basic's relation `Expressions.Arguments`, and a set holds its
- * predicates through `Patterns.Members`, by index. Writing needs no store; reading resolves the symbols' schemas by
- * name, so it goes through `OfStore(store)`, a store of the predicates' bound classes and Basic's that resolves names
- * in `store`; `Builders` is one that resolves none, which writes any predicate and reads those whose symbols' schemas
- * are inline. `register(store)` registers the meta-schemas, and Basic's, in another store.
+ * Sets are mbse-schemas reference objects with a meta-schema (`Patterns.Set`), so a set is stored and sent like any
+ * data: it holds its predicates through `Patterns.Members`, by index. Writing needs no store; reading resolves the
+ * symbols' schemas by name, so it goes through `OfStore(store)`, a store of the predicates' bound classes and the
+ * algebra's that resolves names in `store`; `Builders` is one that resolves none, which writes any predicate and reads
+ * those whose symbols' schemas are inline. `register(store)` registers the meta-schemas, and the algebra's, in another
+ * store.
  */
 
 import { Terms } from "@mbse/expressions/Framework";
-import { Bindings, Errors, Modules, Schemas, Stores } from "@mbse/schemas/Framework";
-import type { PlainMap } from "@mbse/schemas/Framework/Plain";
+import { Bindings, Errors, Schemas, Stores } from "@mbse/schemas/Framework";
 import { repr } from "@mbse/schemas/Framework/Repr";
 import type { OfObject } from "@mbse/schemas/Framework/Visitors";
 
 import * as Predicates from "./Predicates.js";
 
-export const PREDICATE = "Patterns.Predicate";
 export const SET = "Patterns.Set";
-export const MEMBERS = "Patterns.Members";
-
-const text = (name: string) => (p: any) => p.name(name).of((t: any) => t.as_native(String));
-
-/** The relation of a set to its predicates, each at its `index` in the set. */
-export const Members = new Schemas.OfRelation.Builder().name(MEMBERS).links("set", "predicate").properties(
-  (p: any) => p.name("index").of((t: any) => t.as_native(BigInt))).create();
-
 /** Identities are strings, unique per object, as mbse-schemas keys them. */
 let made = 0;
-
-type Rule = Terms.Term;
-type Symbols = Map<string, Schemas.OfAny.Data>;
 
 /** Shared builder mechanics, as mbse-schemas' builders have them. */
 abstract class Builder<D extends object> {
   protected readonly fields: Record<string, unknown>;
 
   constructor(private readonly source?: D) {
-    this.fields = {};
-    if (source !== undefined) {
-      for (const [name, value] of Object.entries(source)) this.fields[name] = value instanceof Map ? new Map(value) : value;
-    }
+    this.fields = source === undefined ? {} : { ...source };
   }
 
   protected abstract make(fields: Record<string, unknown>): D;
@@ -85,111 +57,14 @@ abstract class Builder<D extends object> {
   }
 }
 
-// --- Predicates ---
-
-/** A named rule over symbols, each bound to an object of its schema in a match. */
-class PredicateData {
-  readonly #identity = `predicate ${++made}`;
-  name: string | null;
-  description: string | null;
-  symbols: Symbols;
-  rule: Rule | null;
-
-  constructor(fields: { name?: string | null; description?: string | null; symbols?: Symbols; rule?: Rule | null } = {}) {
-    this.name = fields.name ?? null;
-    this.description = fields.description ?? null;
-    this.symbols = fields.symbols ?? new Map();
-    this.rule = fields.rule ?? null;
-  }
-
-  validate(): string[] {
-    const label = `predicate ${repr(this.name)}`;
-    const problems = ([["name", this.name], ["rule", this.rule]] as const).filter(([, value]) => value === null)
-      .map(([what]) => `${label}: a predicate needs a ${what}`);
-    for (const [symbol, schema] of this.symbols) {
-      if (!(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null)) {
-        problems.push(`${label}: symbol ${repr(symbol)} needs a named reference object schema`);
-      }
-    }
-    const rule = this.rule === null ? [] : Predicates.DIALECT.validate(this.rule, { bound: [...this.symbols.keys()], core: true });
-    return [...problems, ...rule.map((problem) => `${label}: ${problem}`)];
-  }
-
-  identity(): unknown {
-    return this.#identity;
-  }
-
-  schema_name(): string {
-    return PREDICATE;
-  }
-
-  owner(): null {
-    return null;
-  }
-
-  accept(visitor: OfObject): void {
-    Bindings.accept(Builders.predicate, this, visitor);
-  }
-}
-
-class PredicateBuilder extends Builder<PredicateData> {
-  protected make(fields: Record<string, unknown>): PredicateData {
-    return new PredicateData(fields as ConstructorParameters<typeof PredicateData>[0]);
-  }
-
-  name(name: string): this {
-    this.fields["name"] = name;
-    return this;
-  }
-
-  description(text: string): this {
-    this.fields["description"] = text;
-    return this;
-  }
-
-  /** Symbols by name, each with the schema of the objects it binds, in order; added to those already given. */
-  symbols(symbols: Record<string, Schemas.OfAny.Data> | ReadonlyMap<string, Schemas.OfAny.Data>): this {
-    const added = symbols instanceof Map ? [...symbols] : Object.entries(symbols);
-    this.fields["symbols"] = new Map([...((this.fields["symbols"] as Symbols | undefined) ?? []), ...added]);
-    return this;
-  }
-
-  /** The rule, a spec of the predicate algebra whose free names are the symbols. */
-  rule(spec: unknown): this {
-    this.fields["rule"] = Predicates.DIALECT.resolve(spec);
-    return this;
-  }
-}
-
-export namespace OfPredicate {
-  /** A predicate. */
-  export const Data = PredicateData;
-  export type Data = PredicateData;
-  export const Builder = PredicateBuilder;
-  export type Builder = PredicateBuilder;
-  export type Spec = PredicateData | ((builder: PredicateBuilder) => PredicateBuilder);
-  /** The meta-schema of a predicate. */
-  export const Schema = new Schemas.OfObject.Builder().name(PREDICATE).ref().properties(
-    text("name"), text("description"),
-    (p: any) => p.name("symbols").of((t: any) => t.as_indexed((i: any) => i.of(Schemas.OfProperty.Schema)))).relations(
-    (r: any) => r.name("rule").of(Terms.Arguments).me("parent"),
-    (r: any) => r.name("sets").of(Members).me("predicate")).create();
-
-  export function resolve(spec: unknown): PredicateData {
-    if (spec instanceof PredicateData) return spec;
-    if (typeof spec !== "function") throw new TypeError(`expected a predicate or a callable taking its builder, got ${repr(spec)}`);
-    return (spec as (builder: PredicateBuilder) => PredicateBuilder)(new PredicateBuilder()).create();
-  }
-}
-
 // --- Sets ---
 
 /** Predicates, in order. */
 class SetData {
   readonly #identity = `set ${++made}`;
-  predicates: readonly PredicateData[];
+  predicates: readonly Predicates.OfPredicate.Data[];
 
-  constructor(fields: { predicates?: readonly PredicateData[] } = {}) {
+  constructor(fields: { predicates?: readonly Predicates.OfPredicate.Data[] } = {}) {
     this.predicates = Object.freeze([...(fields.predicates ?? [])]);
   }
 
@@ -228,8 +103,8 @@ class SetBuilder extends Builder<SetData> {
   }
 
   /** Predicates, each a `Data` or a callable taking a predicate builder, added in order. */
-  predicates(...specs: OfPredicate.Spec[]): this {
-    this.fields["predicates"] = [...((this.fields["predicates"] as PredicateData[] | undefined) ?? []), ...specs.map(OfPredicate.resolve)];
+  predicates(...specs: Predicates.OfPredicate.Spec[]): this {
+    this.fields["predicates"] = [...((this.fields["predicates"] as Predicates.OfPredicate.Data[] | undefined) ?? []), ...specs.map(Predicates.OfPredicate.resolve)];
     return this;
   }
 }
@@ -242,44 +117,14 @@ export namespace OfSet {
   export type Builder = SetBuilder;
   /** The meta-schema of a set. */
   export const Schema = new Schemas.OfObject.Builder().name(SET).ref()
-    .relations((r: any) => r.name("predicates").of(Members).me("set")).create();
+    .relations((r: any) => r.name("predicates").of(Predicates.Members).me("set")).create();
 }
 
 // --- Reading and writing ---
 
-function linked(entry: Bindings.Entry, link: string, isKind: (value: unknown) => boolean, what: string): any {
-  const target = entry.links.get(link);
-  if (target === null || target === undefined) throw new Errors.ValueError(`link ${repr(link)} is not set`);
-  if (!isKind(target)) throw new TypeError(`${what} must be ${what === "a rule" ? "an expression" : "a predicate"}`);
-  return target;
-}
-
-const isRule = (value: unknown) => Predicates.DIALECT.accepts(value);
-
-function readPredicate(predicate: PredicateData): Bindings.State {
-  const values = new Map<string, unknown>();
-  for (const name of ["name", "description"] as const) if (predicate[name] !== null) values.set(name, predicate[name]);
-  if (predicate.symbols.size > 0) {
-    values.set("symbols", [...predicate.symbols].map(([symbol, schema]) =>
-      new Map<string, unknown>([["name", symbol], ["type", Modules.reference(schema)]])));
-  }
-  const rule = predicate.rule === null ? [] : [new Bindings.Entry(new Map([["argument", predicate.rule]]), new Map([["index", 0n]]))];
-  return new Bindings.State(values, new Map([["rule", rule]]));
-}
-
 function readSet(predicates: SetData): Bindings.State {
   return new Bindings.State(new Map(), new Map([["predicates", predicates.predicates.map((p, i) =>
     new Bindings.Entry(new Map([["predicate", p]]), new Map([["index", BigInt(i)]])))]]));
-}
-
-function makePredicate(store: Stores.Store, state: Bindings.State): PredicateData {
-  const rules = state.entries.get("rule") ?? []; // none yet while a snapshot is read: its entries come after its objects
-  if (rules.length > 1) throw new Errors.ValueError(`a predicate has one rule, got ${rules.length}`);
-  const rule = rules.length > 0 ? linked(rules[0] as Bindings.Entry, "argument", isRule, "a rule") : null;
-  const symbols: Symbols = new Map(((state.values.get("symbols") as PlainMap[] | undefined) ?? []).map((symbol) =>
-    [symbol.get("name") as string, Modules.resolve(store, symbol.get("type") as PlainMap)]));
-  return new PredicateData({ name: (state.values.get("name") as string | undefined) ?? null,
-    description: (state.values.get("description") as string | undefined) ?? null, symbols, rule });
 }
 
 function makeSet(state: Bindings.State): SetData {
@@ -287,7 +132,7 @@ function makeSet(state: Bindings.State): SetData {
   const last = BigInt(entries.length);
   const index = (entry: Bindings.Entry) => (entry.properties.get("index") as bigint | undefined) ?? last;
   const ordered = [...entries].sort((a, b) => (index(a) < index(b) ? -1 : index(a) > index(b) ? 1 : 0));
-  return new SetData({ predicates: ordered.map((entry) => linked(entry, "predicate", (value) => value instanceof PredicateData, "a member")) });
+  return new SetData({ predicates: ordered.map((entry) => Predicates.target(entry, "predicate", (value) => value instanceof Predicates.OfPredicate.Data, "a member")) });
 }
 
 function assign<T extends object>(make: (state: Bindings.State) => T): (instance: T, state: Bindings.State) => T {
@@ -305,17 +150,16 @@ function basic(): (readonly [Schemas.OfObject.Data, (instance?: any) => unknown]
   });
 }
 
-/** A store of predicates, sets and Basic's expressions as their bound classes, reading the symbols' schemas by name in
+/** A store of predicates, sets and the algebra's expressions as their bound classes, reading the symbols' schemas by name in
  * `store`: what snapshots of predicates are read into, and written from. */
 export class OfStore extends Bindings.OfStore {
   declare readonly predicate: Bindings.Binding;
 
   constructor(store: Stores.Store) {
-    const make = (state: Bindings.State) => makePredicate(store, state);
-    const predicate = new Bindings.Binding(OfPredicate.Schema, readPredicate, make, assign(make), { implied: ["sets"] });
+    const predicate = Predicates.binding(store);
     super([[OfSet.Schema, (instance?: SetData) => new Bindings.Builder(SET_BINDING, instance)],
-      [OfPredicate.Schema, (instance?: PredicateData) => new Bindings.Builder(predicate, instance)], ...basic()],
-    [Terms.Arguments, Members]);
+      [Predicates.OfPredicate.Schema, (instance?: Predicates.OfPredicate.Data) => new Bindings.Builder(predicate, instance)], ...basic()],
+    [Terms.Arguments, Predicates.Members]);
     (this as { predicate: Bindings.Binding }).predicate = predicate;
   }
 }
@@ -328,14 +172,14 @@ export const Builders = new OfStore(new Stores.Catalog() as unknown as Stores.St
  * `Proxies.OfStore`), skipping those it already holds. Returns the store. */
 export function register<S extends Stores.Store & { register(schema: never): void }>(store: S): S {
   Predicates.DIALECT.register(store);
-  for (const schema of [OfPredicate.Schema, OfSet.Schema, Members]) {
+  for (const schema of [Predicates.OfPredicate.Schema, OfSet.Schema, Predicates.Members]) {
     if (!store.names().includes(schema.name as string)) store.register(schema as never);
   }
   return store;
 }
 
 /** A set of `predicates`, throwing `ValueError` with every problem `validate()` reports. */
-export function check(predicates: Iterable<OfPredicate.Spec> | SetData): SetData {
+export function check(predicates: Iterable<Predicates.OfPredicate.Spec> | SetData): SetData {
   const result = predicates instanceof SetData ? predicates : new SetBuilder().predicates(...predicates).create();
   const problems = result.validate();
   if (problems.length > 0) throw new Errors.ValueError(problems.join("; "));

@@ -33,9 +33,9 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
   const adult = the.age.ge(18n).data;
   const hasPhone = E.operation("count", E.operation("entries", the, "phones")).ge(1n).data;
   const predicates = new C.OfSet.Builder().predicates(
-    new C.OfPredicate.Builder().name("IsAnAdult").description("18 or older").symbols({ the: Contact }).rule(adult).create(),
-    (b) => b.name("AdultsHavePhones").symbols({ the: Contact }).rule(E.operation("implies", adult, hasPhone)),
-    (b) => b.name("OwnsNumbered").symbols({ c: Contact, p: Phone }).rule(
+    new P.Builder().name("IsAnAdult").description("18 or older").symbols({ the: Contact }).requires(adult).create(),
+    (b) => b.name("AdultsHavePhones").symbols({ the: Contact }).requires(E.operation("implies", adult, hasPhone)),
+    (b) => b.name("OwnsNumbered").symbols({ c: Contact, p: Phone }).requires(
       E.quantifier("any", "e", E.operation("entries", c, "phones"), E.variable("e").phone.eq(p))
         .and_(p.has("number"))),
   ).create();
@@ -43,13 +43,15 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
   // --- empty: a set of no predicates ---
   const empty = new C.OfSet.Builder().create();
 
-  // --- algebra: mandatory, forbidden and possible links, a count, and an extent, over the store ---
-  const owns = P.exists("p", Phone, P.linked(c, "phones", p, "phone"));
+  // --- algebra: mandatory, forbidden and possible links, and two symbols quantified at once ---
+  const owns = P.Exists((q) => q.symbols({ p: Phone }).requires(P.Contains(c.phones, (e) => e.phone.eq(p))));
   const algebra = new C.OfSet.Builder().predicates(
-    (b) => b.name("Mandatory").rule(P.forall("c", Contact, owns)),
-    (b) => b.name("Forbidden").rule(P.forall("c", Contact, owns.not_())),
-    (b) => b.name("Possible").rule(P.forall("c", Contact, P.choice([0.35, owns], [0.65, owns.not_()]))),
-    (b) => b.name("Few").rule(P.count("c", Contact, c.has("age")).le(E.operation("count", P.extent(Phone)))),
+    (b) => b.name("Mandatory").requires(P.Forall((q) => q.symbols({ c: Contact }).requires(owns))),
+    (b) => b.name("Forbidden").symbols({ c: Contact }).forbids(owns),
+    (b) => b.name("Possible").symbols({ c: Contact }).requires(
+      P.Choice((ch) => ch.option(0.35, owns).option(0.65, E.operation("not", owns)))),
+    (b) => b.name("Unnumbered").requires(P.Exists((q) => q.symbols({ c: Contact, p: Phone })
+      .requires(P.Contains(c.phones, (e) => e.phone.eq(p))).forbids(p.has("number")))),
   ).create();
 
   return new Map([

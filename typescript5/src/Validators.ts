@@ -41,7 +41,7 @@ function product<T>(pools: readonly (readonly T[])[]): T[][] {
   return pools.reduce<T[][]>((combinations, pool) => combinations.flatMap((c) => pool.map((item) => [...c, item])), [[]]);
 }
 
-export function Validate(store: Stores.Store, predicates: Iterable<Constraints.OfPredicate.Spec> | Constraints.OfSet.Data,
+export function Validate(store: Stores.Store, predicates: Iterable<Predicates.OfPredicate.Spec> | Constraints.OfSet.Data,
   options: { unknown?: string } = {}): Validator {
   const unknown = options.unknown ?? "report";
   if (!(UNKNOWN as readonly string[]).includes(unknown)) {

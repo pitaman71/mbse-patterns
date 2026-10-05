@@ -14,8 +14,8 @@ implementation's to choose from the rule's shape. `Scan(store)` makes any store 
 
 - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match that fails
   one is never extended; those that read no symbol, only variables, are tested once, first.
-- A conjunct `linked(a, 'adjacency', b)`, or `any(e in entries(a, 'adjacency'), e.link == b)`, relates two symbols
-  through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
+- A conjunct `any(e in entries(a, 'adjacency'), e.link == b)`, as `Predicates.Contains(a.adjacency, lambda e: e.link
+  == b)` writes it, relates two symbols through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
   relation's `unique` clauses makes `a`'s end determine the entry, there is at most one, and the hop is taken first.
 - A symbol no hop reaches is scanned. Symbols that a hop from another could reach are scanned last, so that the hop is
   taken instead; otherwise symbols are scanned in their declared order.
@@ -71,29 +71,20 @@ class _Hop:
         self.source, self.adjacency, self.link, self.target, self.functional = source, adjacency, link, target, functional
 
 
-def _declared(schemas: Mapping[str, Schemas.OfObject.Data], source: str, adjacency: str | None, link: str | None
-              ) -> tuple[str, bool] | None:
-    """The link and whether the hop is functional, for a hop from `source` through `adjacency`, if there is one."""
+def _functional(schemas: Mapping[str, Schemas.OfObject.Data], source: str, adjacency: str | None, link: str) -> bool | None:
+    """Whether a hop from `source` through `adjacency` to its entries' `link` is functional; None if it is not a hop."""
     declared = schemas[source].adjacencies.get(adjacency or "")
     if declared is None or declared.relation is None:
         return None
     relation = declared.relation
-    others = [other for other in relation.links if other != declared.me]
-    link = link if link is not None else others[0] if len(others) == 1 else None
-    if link not in others:
+    if link == declared.me or link not in relation.links:
         return None
     fields = {*relation.links, *relation.properties}
-    return link, any(fields - unique <= {declared.me} for unique in relation.uniques)  # type: ignore[return-value]
+    return any(fields - unique <= {declared.me} for unique in relation.uniques)
 
 
 def _hop(conjunct: Any, schemas: Mapping[str, Schemas.OfObject.Data]) -> _Hop | None:
-    """The hop a conjunct `linked(a, 'adjacency', b)` or `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a`
-    to `b`, if it is one."""
-    if isinstance(conjunct, Predicates.OfLinked):
-        source, target = _variable(conjunct.source, schemas), _variable(conjunct.target, schemas)
-        found = None if source is None or target is None or source == target else _declared(
-            schemas, source, conjunct.adjacency, conjunct.link)
-        return None if found is None else _Hop(source, conjunct.adjacency, found[0], target, found[1])  # type: ignore[arg-type]
+    """The hop a conjunct `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a` to `b`, if it is one."""
     if not (isinstance(conjunct, E.OfQuantifier.Data) and conjunct.quantifier == "any"):
         return None
     collection, body, item = conjunct.collection, conjunct.body, conjunct.name
@@ -107,8 +98,8 @@ def _hop(conjunct: Any, schemas: Mapping[str, Schemas.OfObject.Data]) -> _Hop | 
                 and _variable(get.arguments[0], {item}) is not None and source is not None and target is not None
                 and target not in (source, item)):
             link = _text(get.arguments[1])
-            found = None if link is None else _declared(schemas, source, adjacency, link)
-            return None if found is None else _Hop(source, adjacency, found[0], target, found[1])  # type: ignore[arg-type]
+            functional = None if link is None else _functional(schemas, source, adjacency, link)
+            return None if functional is None else _Hop(source, adjacency, link, target, functional)  # type: ignore[arg-type]
     return None
 
 

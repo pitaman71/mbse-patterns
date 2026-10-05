@@ -7,32 +7,49 @@ the schemas: stored, sent and validated like any other data. Validators check da
 store's matches for a predicate, streaming them lazily, planned from the rule's shape.
 
 ```python
+from mbse.Expressions import Expressions as E
 from mbse.Expressions.Dialects.Python import Text
-from mbse.Patterns import Constraints, Queries, Validators
+from mbse.Patterns import Predicates, Queries, Validators
 
 IsAnAdult = (
-    Constraints.OfPredicate.Builder()
+    Predicates.Builder()
     .name("IsAnAdult")
     .description("18 or older")
     .symbols({"the": Contact})
-    .rule(Text.FromFunction(lambda the: the.age >= 18))
+    .requires(Text.FromFunction(lambda the: the.age >= 18))
     .create()
 )
-Validators.Validate(store, [IsAnAdult]).Reachable(Contact, ann)  # ["the=Contact#0: 'IsAnAdult' is unknown"], say
-Queries.select(store, IsAnAdult)                                  # an iterator over the matches: {"the": ann}, ...
+c, p = E.variable("c"), E.variable("p")
+HasAPhone = (
+    Predicates.Builder()
+    .name("HasAPhone")
+    .symbols({"c": Contact})
+    .requires(Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(
+        Predicates.Contains(c.phones, lambda e: e.phone == p))))
+    .create()
+)
+Validators.Validate(store, [IsAnAdult, HasAPhone]).Reachable(Contact, ann)  # ["the=Contact#0: 'IsAnAdult' is unknown"], say
+Queries.select(store, IsAnAdult)                                             # an iterator over the matches: {"the": ann}, ...
 ```
 
 ```typescript
 import { Expressions as E } from "@mbse/expressions";
-import { Constraints, Queries, Validators } from "@mbse/patterns";
+import { Predicates, Queries, Validators } from "@mbse/patterns";
 
-const IsAnAdult = new Constraints.OfPredicate.Builder()
+const IsAnAdult = new Predicates.Builder()
   .name("IsAnAdult")
   .description("18 or older")
   .symbols({ the: Contact })
-  .rule(E.variable("the").age.ge(18n))
+  .requires(E.variable("the").age.ge(18n))
   .create();
-Validators.Validate(store, [IsAnAdult]).Reachable(Contact, ann);
+const [c, p] = [E.variable("c"), E.variable("p")];
+const HasAPhone = new Predicates.Builder()
+  .name("HasAPhone")
+  .symbols({ c: Contact })
+  .requires(Predicates.Exists((q) => q.symbols({ p: Phone }).requires(
+    Predicates.Contains(c.phones, (e) => e.phone.eq(p)))))
+  .create();
+Validators.Validate(store, [IsAnAdult, HasAPhone]).Reachable(Contact, ann);
 Queries.select(store, IsAnAdult);
 ```
 
@@ -42,7 +59,8 @@ to data are designed ([docs/PATTERNS.md](docs/PATTERNS.md)) for the next release
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
 (`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a rule from a
-lambda (`Text.FromFunction`); TypeScript writes rules with mbse-expressions' writers.
+lambda (`Text.FromFunction`), as `Contains` reads its condition; TypeScript writes rules with mbse-expressions'
+writers, and calls `Contains`'s condition with a variable.
 
 ## Getting started
 

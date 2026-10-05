@@ -1,6 +1,6 @@
 # mbse-patterns in TypeScript
 
-Install `@mbse/patterns`, then import `Constraints`, `Validators` and `Queries` from it, the rules' writers from
+Install `@mbse/patterns`, then import `Predicates`, `Constraints`, `Validators` and `Queries` from it, the rules' writers from
 `@mbse/expressions`, and the data's framework from `@mbse/schemas/Framework`. Everything matches Python, with the
 differences below.
 
@@ -10,7 +10,7 @@ The same address book as in Python.
 
 ```typescript
 import { Expressions as E } from "@mbse/expressions";
-import { Constraints, Queries, Validators } from "@mbse/patterns";
+import { Constraints, Predicates, Queries, Validators } from "@mbse/patterns";
 import { JSON as SchemaJSON, Proxies, Schemas as S } from "@mbse/schemas/Framework";
 
 const native = (name: string, kind: unknown) => (p: any) => p.name(name).of((t: any) => t.as_native(kind));
@@ -31,14 +31,23 @@ const check = (condition: boolean, what: string) => {
 };
 const same = (a: Iterable<unknown>, b: unknown[]) => JSON.stringify([...a]) === JSON.stringify(b);
 
-// Predicates: named rules over symbols, built fluently, with rules written with writers.
-const [the, c, p, e] = [E.variable("the"), E.variable("c"), E.variable("p"), E.variable("e")];
-const IsAnAdult = new Constraints.OfPredicate.Builder().name("IsAnAdult").description("18 or older")
-  .symbols({ the: Contact }).rule(the.age.ge(18n)).create();
-const owns = E.quantifier("any", "e", E.operation("entries", c, "phones"), e.phone.eq(p)); // p is one of c's phones
-const OwnedNumbered = new Constraints.OfPredicate.Builder().name("OwnedNumbered").symbols({ c: Contact, p: Phone })
-  .rule(E.operation("implies", owns, p.has("number"))).create();
+// Predicates: named rules over symbols, built fluently, with conditions written with writers; the symbols are written
+// as variables of the same names.
+const [the, c, p] = [E.variable("the"), E.variable("c"), E.variable("p")];
+const IsAnAdult = new Predicates.Builder().name("IsAnAdult").description("18 or older")
+  .symbols({ the: Contact }).requires(the.age.ge(18n)).create();
+const owns = Predicates.Contains(c.phones, (e) => e.phone.eq(p)); // p is one of c's phones
+const OwnedNumbered = new Predicates.Builder().name("OwnedNumbered").symbols({ c: Contact, p: Phone })
+  .requires(E.operation("implies", owns, p.has("number"))).create();
 const rules = Constraints.check([IsAnAdult, OwnedNumbered]);
+
+// The algebra: quantifiers over a schema's objects, built as predicates are. Mandatory, forbidden and possible links.
+const HasAPhone = Predicates.Exists((q) => q.symbols({ p: Phone }).requires(owns));
+const EveryoneHasAPhone = new Predicates.Builder().name("EveryoneHasAPhone") // no symbols: a statement about the store
+  .requires(Predicates.Forall((q) => q.symbols({ c: Contact }).requires(HasAPhone))).create();
+const Phoneless = new Predicates.Builder().name("Phoneless").symbols({ c: Contact }).forbids(HasAPhone).create();
+const Sometimes = new Predicates.Builder().name("Sometimes").symbols({ c: Contact }).requires(Predicates.Choice(
+  (ch) => ch.option(0.35, HasAPhone).option(0.65, E.operation("not", HasAPhone)))).create();
 
 // The store's data is what its singleton directory reaches.
 const ann = store.Contact().name("Ann").age(30n).phones((x: any) => x.phone((q: any) => q.number("555-0100"))).create();
@@ -53,6 +62,9 @@ check(same(validate.Reachable(Directory, store.singleton("book.Directory")), [
   "the=Contact#2: 'IsAnAdult' is unknown", "the=Contact#3: 'IsAnAdult' does not hold",
   "c=Contact#2, p=Phone#5: 'OwnedNumbered' does not hold"]), "book");
 check(validate(Contact, ann).length === 0 && Validators.Validate(store, rules, { unknown: "ignore" })(Contact, bob).length === 0, "one");
+const links = Validators.Validate(store, [EveryoneHasAPhone, Phoneless, Sometimes]);
+check(same(links(Contact, ann), ["the store: 'EveryoneHasAPhone' does not hold", "c=Contact#0: 'Phoneless' does not hold"]), "links");
+check(same(links(Contact, kid), ["the store: 'EveryoneHasAPhone' does not hold"]), "phoneless"); // the kid is phoneless, as allowed
 
 // Predicates are data: written by their symbols' schema names, read back through a store that resolves them.
 const text = SchemaJSON.ToJSON(Constraints.Builders).Reachable(Constraints.OfSet.Schema, rules);
@@ -62,8 +74,8 @@ check(same(copy.predicates.map((x) => x.name), ["IsAnAdult", "OwnedNumbered"]) &
 // Queries: matches stream lazily, planned from the rule's shape.
 const query = new Queries.Scan(store);
 check([...query.select(IsAnAdult)].map((m) => m["the"]).every((x) => x === ann), "adults");
-const numbered = new Constraints.OfPredicate.Builder().name("Numbered").symbols({ c: Contact, p: Phone })
-  .rule(owns.and_(p.has("number"))).create();
+const numbered = new Predicates.Builder().name("Numbered").symbols({ c: Contact, p: Phone })
+  .requires(owns).requires(p.has("number")).create();
 check(same(query.explain(numbered), ["c: scan Contact", "p: c.phones to phone, any number, then 2 tests"]), "plan");
 check(same([...query.select(numbered)].map((m: any) => [m.c.name, m.p.number]), [["Ann", "555-0100"]]), "numbered");
 check([...query.select(IsAnAdult, null, true)].length === 2, "with unknown");
@@ -73,9 +85,11 @@ check([...query.select(IsAnAdult, null, true)].length === 2, "with unknown");
 
 - Integers are `bigint`s (`18n`, and `BigInt` as an `int` property's native); a `number` is a float.
 - Rules are written with writers: TypeScript has no `FromFunction`, since a JavaScript function has no Python source.
+  `Contains` calls its condition with a variable named after its one parameter, read from the function's source, so
+  the condition is written with writers too: `(e) => e.phone.eq(p)`.
 - `.symbols(...)` takes a record or a `Map`, and a predicate's `symbols` is a `Map`; a match is a record.
 - A validator's options are an object: `Validate(store, rules, { unknown: "ignore" })`.
-- The algebra's choices take arrays, `P.choice([0.35, owns], [0.65, owns.not_()])`, and its evaluator is
+- Builders are made with `new`: `new Predicates.Builder()`; the algebra's evaluator is
   `new Predicates.Evaluator(store).run(rule, variables)`.
 - `select(predicate, variables, unknown)` takes `unknown` by position (`null` for no variables), and returns a
   generator: `next()` gives `{ value, done }`.

@@ -31,10 +31,13 @@ python3/mbse/Patterns/, typescript5/src/
   its schema. The rule is a Basic expression (mbse-expressions) whose free names are the symbols: "a contact is an
   adult" has one symbol, `the`, and the rule `the.age >= 18`; "a contact's phone has a number" has two, `c` and `p`,
   and the rule `any(e in entries(c, 'phones'), e.phone == p) implies has(p, 'number')`.
-- **Predicates are built as schemas are.** `OfPredicate.Builder()` is fluent: `.name(...)`, `.description(...)`,
-  `.symbols({"the": Contact})` (added in order) and `.rule(spec)`, finalized by `create()`, `clone()` or `update()`,
-  none of which validates. A rule spec is any Basic `Spec`: data, a writer, or, in Python, what
-  `Python.Text.FromFunction(lambda the: the.age >= 18)` reads from a function whose parameters are the symbols.
+- **Predicates are built as schemas are.** `Predicates.Builder()` (`OfPredicate.Builder`) is fluent: `.name(...)`,
+  `.description(...)`, `.symbols({"the": Contact})` (added in order), and `.requires(spec)` and `.forbids(spec)`, which
+  add conditions (the rule is their conjunction, and `forbids` adds the negation), finalized by `create()`, `clone()`
+  or `update()`, none of which validates. A condition is any spec of the algebra: data, a writer, a term built by its
+  builder, or, in Python, what `Python.Text.FromFunction(lambda the: the.age >= 18)` reads from a function whose
+  parameters are the symbols. Elsewhere the symbols are written as Basic variables of the same names
+  (`c = E.variable("c")`).
   `OfSet.Builder().predicates(*specs)` gathers predicates in order, each a predicate or a callable taking a predicate
   builder.
 - **Predicates live beside the schemas.** A schema does not hold its predicates, and mbse-schemas does not depend on
@@ -92,9 +95,8 @@ python3/mbse/Patterns/, typescript5/src/
   - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a partial match
     that fails one is never extended; those that read only variables are tested once, first, and a rule they decide
     false yields nothing.
-  - A conjunct `linked(a, 'adjacency', b)`, or `any(e in entries(a, 'adjacency'), e.link == b)`, a hop, relates two
-    symbols through a relation: `b`'s
-    candidates are then the targets of `a`'s entries through `link`, those of `b`'s schema, not `b`'s whole extent.
+  - A conjunct `any(e in entries(a, 'adjacency'), e.link == b)`, as `Contains(a.adjacency, lambda e: e.link == b)`
+    writes it, a hop, relates two symbols through a relation: `b`'s candidates are then the targets of `a`'s entries through `link`, those of `b`'s schema, not `b`'s whole extent.
   - The relation's `unique` clauses say how far a hop fans out: when one makes `a`'s end the key of the relation's
     entries (`unique(S)` with every field outside `S` being `a`'s link), `a` has at most one entry, and such hops are
     taken before the others.
@@ -113,30 +115,37 @@ nothing ranges over a schema's objects in a store, and links are reached only th
 and forbidden links are statements about the store, so they need both.
 
 - **`Predicates` is a dialect extending Basic**, declared with `Terms.Declared(..., extends=Basic)` (mbse-expressions
-  0.2.3), so its trees may mix Basic's kinds and its own, Basic's writers hold its terms, and its writers give Basic
-  writers. Every Basic expression is a predicate's rule as before; the dialect adds:
-  - `extent(Schema)`, a schema's objects in the store, and the quantifiers `forall(x, Schema, body)`,
-    `exists(x, Schema, body)` and `count(x, Schema, body)`, whose collection is an extent and which bind `x` to each
-    of its objects;
-  - `linked(a, adjacency, b)`, which holds when one of `a`'s entries in `adjacency` links `b`, the relation's other
-    link (`linked(a, adjacency, link, b)` names the link, for a relation of more than two);
-  - `choice((weight, predicate), ...)`, a weighted disjunction of `option`s: it holds when any of them holds (Kleene's
-    disjunction), and its weights, positive and summing to 1, are how often each option is chosen by a generator, and
-    what a characterizer estimates.
-  - Their meta-schemas are `Patterns.OfExtent`, `Patterns.OfForall`, ... `Patterns.OfOption`.
-- **Links are mandatory, possible or forbidden by these terms**:
-  - mandatory: `forall(c, Contact, exists(p, Phone, linked(c, "phones", p)))`;
-  - forbidden: `forall(c, Contact, not(exists(p, Pager, linked(c, "pagers", p))))`;
-  - possible, 35% of the time: `forall(c, Contact, choice((0.35, exists(p, Pager, linked(c, "pagers", p))),
-    (0.65, not(exists(p, Pager, linked(c, "pagers", p))))))`.
+  0.2.3), so its trees may mix Basic's kinds and its own, and Basic's writers hold its terms. Every Basic expression is
+  a condition as before. Each of its kinds is a data class with a builder, as schemas and predicates are, and
+  `Exists(spec)`, `Forall(spec)` and `Choice(spec)` resolve a spec (data, or a callable taking the builder); there are
+  no writer functions of their own:
+  - `Exists(lambda q: q.symbols({"p": Phone}).requires(...).forbids(...))` and `Forall(...)`, quantifiers whose
+    collection is an `extent`, a schema's objects in the store, and which bind each symbol to each of its objects.
+    Their builders take symbols and conditions as a predicate's does; with several symbols, the first is the
+    quantifier's and each other a quantifier of the same kind in its body, so that the conditions hold within them all
+    (the cross product);
+  - `Contains(c.phones, lambda e: e.phone == p)`, whether one of `c`'s entries in an adjacency satisfies a condition
+    on the entry. It is Basic's `any(e in entries(c, 'phones'), e.phone == p)`, not a term of its own: Python reads the
+    condition as `FromFunction` reads a function, and TypeScript calls it with a variable named after its parameter
+    (`(e) => e.phone.eq(p)`). A relation of more than two links needs nothing more: the condition names the link;
+  - `Choice(lambda ch: ch.option(0.35, a).option(0.65, b))`, a weighted disjunction of `option`s: it holds when any of
+    them holds (Kleene's disjunction), and its weights, positive and summing to 1, are how often each option is chosen
+    by a generator, and what a characterizer estimates.
+  - Their meta-schemas are `Patterns.OfExtent`, `Patterns.OfForall`, `Patterns.OfExists`, `Patterns.OfChoice` and
+    `Patterns.OfOption`.
+- **Links are mandatory, possible or forbidden by these terms**, with `owns = Exists(lambda q: q.symbols({"p":
+  Phone}).requires(Contains(c.phones, lambda e: e.phone == p)))`:
+  - mandatory: `Builder().symbols({"c": Contact}).requires(owns)`;
+  - forbidden: `Builder().symbols({"c": Contact}).forbids(owns)`;
+  - possible, 35% of the time: `Builder().symbols({"c": Contact}).requires(Choice(lambda ch: ch.option(0.35, owns)
+    .option(0.65, not(owns))))`.
 - **A predicate's symbols stay implicitly universal**; a predicate without symbols is a statement about the whole
-  store, checked once.
+  store, checked once (`Builder().requires(Forall(lambda q: q.symbols({"c": Contact}).requires(owns)))`).
 - **Evaluating these terms needs the store**, which Basic's evaluator never has: `Evaluator(store)` is Basic's
-  interpreter with extents and links from the store, reading each extent once. `linked` could be written in Basic
-  (`any(e in entries(a, adjacency), e.link == b)`); the quantifiers over extents and `choice` cannot.
-- **The planner reads the terms directly**: a top-level `linked` between two symbols is a hop, as the `any` over
-  `entries` is; `exists` and `forall` stop at the first witness or counterexample. Planning inside quantifiers (a hop
-  within an `exists`) is an open question.
+  interpreter with extents from the store, reading each extent once.
+- **The planner reads the conditions directly**: a top-level `Contains` between two symbols is a hop; `Exists` and
+  `Forall` stop at the first witness or counterexample. Planning inside quantifiers (a hop within an `Exists`) is an
+  open question.
 
 ## Distributions
 
@@ -158,7 +167,7 @@ distributions for what the predicate leaves open.
 - **A pattern is built as predicates are**: `OfPattern.Builder().name("Contacts").of(Contact)
   .where("IsSenior").property("age", Normal(72, 5)).relation("phones", Poisson(1.5), Phone)...create()`.
 - **It refers to predicates by name or inline**: `.where("IsSenior")` names a predicate, written as a reference and
-  resolved when read, as a schema is; `.where(lambda p: p.symbols(...).rule(...))` builds one in place, written in
+  resolved when read, as a schema is; `.where(lambda p: p.symbols(...).requires(...))` builds one in place, written in
   place.
 - **Choices weigh the population**: a predicate's `choice` divides it (30% seniors, 70% not), and nested choices give
   conditional proportions (of seniors, 90% have an email).
@@ -241,9 +250,13 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - Generated data is byte-identical across implementations from a seed.
 - A store is equipped with a random source when it is made (`Stores.Random`, in mbse-schemas); PCG32 is the reference
   source, and streams split by key from the seed, not from what was drawn.
-- Mandatory, possible and forbidden links are predicates: quantifiers over extents (`forall`, `exists`, `count`) and
-  `linked` are terms of a `Predicates` dialect extending Basic, and "possible" is a weighted disjunction (`choice`) of
-  the alternatives, which validation reads as their disjunction and generators as their weights.
+- Mandatory, possible and forbidden links are predicates: quantifiers over extents (`Exists`, `Forall`) are terms of a
+  `Predicates` dialect extending Basic, links are tested by `Contains` (Basic's `any` over `entries`), and "possible"
+  is a weighted disjunction (`Choice`) of the alternatives, which validation reads as their disjunction and generators
+  as their weights.
+- The algebra follows the builder precedent of mbse-schemas: each term is a data class with a builder, built from a
+  spec (data, or a callable taking the builder), and a predicate's conditions are added by `.requires(...)` and
+  `.forbids(...)`; there are no writer functions of the package's own.
 - A pattern is a predicate with weighted choices, plus distributions; it refers to predicates by name or inline.
 - A predicate links its rule through `Expressions.Arguments`, whose argument end Basic's kinds already declare
   (`used_by`), so mbse-schemas' validation accepts the link; a relation of this package's would need Basic's kinds to

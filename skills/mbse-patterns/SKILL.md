@@ -7,15 +7,25 @@ description: Write predicates (named rules over symbols bound to mbse-schemas ob
 
 A predicate is a named rule over *symbols*, each bound to an object of an
 [mbse-schemas](https://github.com/pitaman71/mbse-schemas) schema; it applies to a *match*, which binds every symbol.
-It is built fluently, as schemas are, with mbse-expressions' Basic rules:
+It is built fluently, as schemas are, from conditions written with mbse-expressions' Basic rules and the terms of the
+predicate algebra, each built fluently too:
 
 ```python fragment
 IsAnAdult = (
-    Constraints.OfPredicate.Builder()
+    Predicates.Builder()
     .name("IsAnAdult")
     .description("18 or older")
     .symbols({"the": Contact})
-    .rule(Python.Text.FromFunction(lambda the: the.age >= 18))
+    .requires(Python.Text.FromFunction(lambda the: the.age >= 18))
+    .create()
+)
+c, p = E.variable("c"), E.variable("p")
+HasAPhone = (
+    Predicates.Builder()
+    .name("HasAPhone")
+    .symbols({"c": Contact})
+    .requires(Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(
+        Predicates.Contains(c.phones, lambda e: e.phone == p))))
     .create()
 )
 ```
@@ -36,23 +46,26 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
 ## Rules that prevent most mistakes
 
 1. **A symbol's schema is a named reference object schema**, as a store registers it. The rule's free names are the
-   symbols (and, in a query, its variables); only Basic's core vocabulary is allowed. `Constraints.check(...)` and every
-   validator and query reject anything else up front.
+   symbols, written as Basic variables of the same names (`c = E.variable("c")`), and, in a query, its variables; only
+   Basic's core vocabulary is allowed. `Constraints.check(...)` and every validator and query reject anything else up
+   front.
 2. **A predicate applies to every match.** With several symbols, the matches are the cross product of their objects;
    the rule says which combinations matter (e.g. that a phone is one of a contact's).
 3. **Unknown is not false.** A rule reading an absent property is unknown; a validator reports it as unknown by
    default (`unknown` is `report`, `ignore` or `violation`), and a query leaves it out unless asked.
 4. **Queries see the store's data, not everything built.** A schema's extent is what the store's singletons reach.
-5. **Links are predicates.** `Predicates` extends Basic with `forall`, `exists` and `count` over a schema's objects,
-   `linked(a, "phones", b)` and weighted `choice`s: mandatory, forbidden and possible links are rules, and a predicate
-   without symbols is a statement about the whole store.
-6. **Shape the rule for the planner.** Top-level `and`s are tested as early as their symbols allow, and
-   `linked(a, "phones", b)` takes `b` from `a`'s entries instead of scanning; `explain` shows the
-   plan. Relations' `unique` clauses tell it when such a hop gives at most one object.
+5. **Links are predicates.** `Predicates.Exists` and `Forall` quantify over a schema's objects, built by a builder with
+   `.symbols(...)`, `.requires(...)` and `.forbids(...)`; `Contains(c.phones, lambda e: e.phone == p)` tests an
+   adjacency's entries; `Choice(lambda ch: ch.option(0.35, a).option(0.65, b))` is weighted. Mandatory, forbidden and
+   possible links are predicates, and a predicate without symbols is a statement about the whole store.
+6. **Shape the rule for the planner.** Each `.requires(...)` is a conjunct, tested as early as its symbols allow, and
+   `Contains(c.phones, lambda e: e.phone == p)` between two symbols takes `p` from `c`'s entries instead of scanning;
+   `explain` shows the plan. Relations' `unique` clauses tell it when such a hop gives at most one object.
 7. **Reading predicates resolves their schemas by name**: read through `Constraints.OfStore(store)`, with the store that
    registers them. Writing needs no store.
-8. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`), and
-   a validator's options are an object (`{ unknown: "ignore" }`).
+8. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`, and
+   `Contains` calls its condition with a variable: `(e) => e.phone.eq(p)`), and a validator's options are an object
+   (`{ unknown: "ignore" }`).
 
 ## Load the reference for your task
 

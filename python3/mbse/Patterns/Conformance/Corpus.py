@@ -33,9 +33,9 @@ def build():
     adult = the.age.ge(18).data
     has_phone = E.operation("count", E.operation("entries", the, "phones")).ge(1).data
     predicates = C.OfSet.Builder().predicates(
-        C.OfPredicate.Builder().name("IsAnAdult").description("18 or older").symbols({"the": Contact}).rule(adult).create(),
-        lambda b: b.name("AdultsHavePhones").symbols({"the": Contact}).rule(E.operation("implies", adult, has_phone)),
-        lambda b: b.name("OwnsNumbered").symbols({"c": Contact, "p": Phone}).rule(
+        P.Builder().name("IsAnAdult").description("18 or older").symbols({"the": Contact}).requires(adult).create(),
+        lambda b: b.name("AdultsHavePhones").symbols({"the": Contact}).requires(E.operation("implies", adult, has_phone)),
+        lambda b: b.name("OwnsNumbered").symbols({"c": Contact, "p": Phone}).requires(
             E.quantifier("any", "e", E.operation("entries", c, "phones"), E.variable("e").phone.eq(p))
             .and_(p.has("number"))),
     ).create()
@@ -43,13 +43,16 @@ def build():
     # --- empty: a set of no predicates ---
     empty = C.OfSet.Builder().create()
 
-    # --- algebra: mandatory, forbidden and possible links, a count, and an extent, over the store ---
-    owns = P.exists("p", Phone, P.linked(c, "phones", p, "phone"))
+    # --- algebra: mandatory, forbidden and possible links, and two symbols quantified at once ---
+    owns = P.Exists(lambda q: q.symbols({"p": Phone}).requires(P.Contains(c.phones, lambda e: e.phone == p)))
     algebra = C.OfSet.Builder().predicates(
-        lambda b: b.name("Mandatory").rule(P.forall("c", Contact, owns)),
-        lambda b: b.name("Forbidden").rule(P.forall("c", Contact, owns.not_())),
-        lambda b: b.name("Possible").rule(P.forall("c", Contact, P.choice((0.35, owns), (0.65, owns.not_())))),
-        lambda b: b.name("Few").rule(P.count("c", Contact, c.has("age")).le(E.operation("count", P.extent(Phone)))),
+        lambda b: b.name("Mandatory").requires(P.Forall(lambda q: q.symbols({"c": Contact}).requires(owns))),
+        lambda b: b.name("Forbidden").symbols({"c": Contact}).forbids(owns),
+        lambda b: b.name("Possible").symbols({"c": Contact}).requires(
+            P.Choice(lambda ch: ch.option(0.35, owns).option(0.65, E.operation("not", owns)))),
+        lambda b: b.name("Unnumbered").requires(P.Exists(lambda q: q.symbols({"c": Contact, "p": Phone})
+                                                         .requires(P.Contains(c.phones, lambda e: e.phone == p))
+                                                         .forbids(p.has("number")))),
     ).create()
 
     return {

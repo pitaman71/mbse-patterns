@@ -9,4 +9,4 @@ byte-identical across implementations, and that each reads every other's back.
 |---|---|
 | `predicates` | a set of predicates of one and two symbols: a description, a rule shared by two predicates (written once), symbols written by their schemas' names, comparisons, `implies`, `count` of `entries`, a quantifier relating two symbols, `has` |
 | `empty` | a set of no predicates |
-| `algebra` | predicates of the algebra: mandatory, forbidden and possible links (`forall`, `exists`, `linked` with its link, `choice` of weighted `option`s), a `count` compared with Basic's `count` of an `extent` |
+| `algebra` | predicates of the algebra, built by their builders: mandatory, forbidden and possible links (`forall` and `exists` over an `extent`, `Contains` as Basic's `any` over `entries`, `forbids` as `not`, a `choice` of weighted `option`s), and two symbols quantified at once (nested `exists`) |

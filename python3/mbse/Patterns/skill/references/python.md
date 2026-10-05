@@ -1,6 +1,6 @@
 # mbse-patterns in Python
 
-Install `mbse-patterns`, then import `Constraints`, `Validators` and `Queries` from `mbse.Patterns`, the rules' writers
+Install `mbse-patterns`, then import `Predicates`, `Constraints`, `Validators` and `Queries` from `mbse.Patterns`, the rules' writers
 from `mbse.Expressions` (and `Text.FromFunction` from `mbse.Expressions.Dialects.Python`), and the data's framework from
 `mbse.Schemas.Framework`.
 
@@ -12,7 +12,7 @@ against data, and used as queries.
 ```python
 from mbse.Expressions import Expressions as E
 from mbse.Expressions.Dialects.Python import Text
-from mbse.Patterns import Constraints, Queries, Validators
+from mbse.Patterns import Constraints, Predicates, Queries, Validators
 from mbse.Schemas.Framework import JSON, Proxies, Schemas as S
 
 
@@ -32,14 +32,23 @@ store = Proxies.OfStore()
 for schema in (Directory, Contact, Phone, Listed, Phones):
     store.register(schema)
 
-# Predicates: named rules over symbols, built fluently. A rule may be read from a lambda, or written with writers.
-IsAnAdult = (Constraints.OfPredicate.Builder().name("IsAnAdult").description("18 or older")
-             .symbols({"the": Contact}).rule(Text.FromFunction(lambda the: the.age >= 18)).create())
-c, p, e = E.variable("c"), E.variable("p"), E.variable("e")
-owns = E.quantifier("any", "e", E.operation("entries", c, "phones"), e.phone.eq(p))  # p is one of c's phones
-OwnedNumbered = (Constraints.OfPredicate.Builder().name("OwnedNumbered").symbols({"c": Contact, "p": Phone})
-                 .rule(E.operation("implies", owns, p.has("number"))).create())
+# Predicates: named rules over symbols, built fluently. A condition may be read from a lambda, or written with
+# writers; the symbols are written as variables of the same names.
+IsAnAdult = (Predicates.Builder().name("IsAnAdult").description("18 or older")
+             .symbols({"the": Contact}).requires(Text.FromFunction(lambda the: the.age >= 18)).create())
+c, p = E.variable("c"), E.variable("p")
+owns = Predicates.Contains(c.phones, lambda e: e.phone == p)  # p is one of c's phones
+OwnedNumbered = (Predicates.Builder().name("OwnedNumbered").symbols({"c": Contact, "p": Phone})
+                 .requires(E.operation("implies", owns, p.has("number"))).create())
 rules = Constraints.check([IsAnAdult, OwnedNumbered])
+
+# The algebra: quantifiers over a schema's objects, built as predicates are. Mandatory, forbidden and possible links.
+HasAPhone = Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(owns))
+EveryoneHasAPhone = (Predicates.Builder().name("EveryoneHasAPhone")  # no symbols: a statement about the whole store
+                     .requires(Predicates.Forall(lambda q: q.symbols({"c": Contact}).requires(HasAPhone))).create())
+Phoneless = Predicates.Builder().name("Phoneless").symbols({"c": Contact}).forbids(HasAPhone).create()
+Sometimes = (Predicates.Builder().name("Sometimes").symbols({"c": Contact}).requires(Predicates.Choice(
+    lambda ch: ch.option(0.35, HasAPhone).option(0.65, E.operation("not", HasAPhone)))).create())
 
 # The store's data is what its singleton directory reaches.
 ann = store.Contact().name("Ann").age(30).phones(lambda x: x.phone(lambda q: q.number("555-0100"))).create()
@@ -54,6 +63,9 @@ assert validate.Reachable(Directory, store.singleton("book.Directory")) == [
     "the=Contact#2: 'IsAnAdult' is unknown", "the=Contact#3: 'IsAnAdult' does not hold",
     "c=Contact#2, p=Phone#5: 'OwnedNumbered' does not hold"]
 assert validate(Contact, ann) == [] and Validators.Validate(store, rules, unknown="ignore")(Contact, bob) == []
+links = Validators.Validate(store, [EveryoneHasAPhone, Phoneless, Sometimes])
+assert links(Contact, ann) == ["the store: 'EveryoneHasAPhone' does not hold", "c=Contact#0: 'Phoneless' does not hold"]
+assert links(Contact, kid) == ["the store: 'EveryoneHasAPhone' does not hold"]  # the kid is phoneless, as allowed
 
 # Predicates are data: written by their symbols' schema names, read back through a store that resolves them.
 text = JSON.ToJSON(Constraints.Builders).Reachable(Constraints.OfSet.Schema, rules)
@@ -63,8 +75,8 @@ assert [p.name for p in copy.predicates] == ["IsAnAdult", "OwnedNumbered"] and c
 # Queries: matches stream lazily, planned from the rule's shape.
 query = Queries.Scan(store)
 assert [m["the"] for m in query.select(IsAnAdult)] == [ann]
-numbered = (Constraints.OfPredicate.Builder().name("Numbered").symbols({"c": Contact, "p": Phone})
-            .rule(owns.and_(p.has("number"))).create())
+numbered = (Predicates.Builder().name("Numbered").symbols({"c": Contact, "p": Phone})
+            .requires(owns).requires(p.has("number")).create())
 assert query.explain(numbered) == ["c: scan Contact", "p: c.phones to phone, any number, then 2 tests"]
 assert [(m["c"].name, m["p"].number) for m in query.select(numbered)] == [("Ann", "555-0100")]
 assert list(query.select(IsAnAdult, unknown=True)) == [{"the": ann}, {"the": bob}]
@@ -73,23 +85,25 @@ assert list(query.select(IsAnAdult, unknown=True)) == [{"the": ann}, {"the": bob
 ## Cheat sheet
 
 ```python fragment
-Constraints.OfPredicate.Builder().name(n).description(d).symbols({"the": Schema}).rule(spec).create()  # clone(), update()
+Predicates.Builder().name(n).description(d).symbols({"the": Schema}).requires(spec).forbids(spec).create()  # clone(), update()
 Constraints.OfSet.Builder().predicates(*specs).create()     # specs: predicates, or callables taking a predicate builder
 Constraints.check(predicates)                               # a set, or ValueError with every problem
 Constraints.OfStore(store); Constraints.Builders            # read (and write) predicates; Builders resolves no names
-Constraints.register(store)                                 # the meta-schemas, and Basic's, in another store
+Constraints.register(store)                                 # the meta-schemas, and the algebra's, in another store
 Validators.Validate(store, predicates, unknown="report")(schema, value)   # or .Reachable(schema, root)
 Queries.Scan(store).select(predicate, variables=None, unknown=False)       # matches: {symbol: object}
 Queries.Scan(store).explain(predicate, variables=None)                     # the plan, one line per symbol
 Queries.select(store, predicate, ...)                       # a queryable store's own select, or a scan
-P.forall("c", Contact, P.exists("p", Phone, P.linked(c, "phones", p)))   # the algebra: mandatory links
-P.choice((0.35, owns), (0.65, owns.not_())); P.count("c", Contact, body); P.extent(Contact)
+Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(spec).forbids(spec))   # and Forall: the algebra
+Predicates.Contains(c.phones, lambda e: e.phone == p)       # Basic's any over entries(c, 'phones'); a hop for the planner
+Predicates.Choice(lambda ch: ch.option(0.35, spec).option(0.65, spec))   # a weighted disjunction
 Predicates.Evaluator(store)(rule, variables)                # evaluates the algebra over a store
 ```
 
 ## Traps
 
-- `Text.FromFunction` reads the lambda's parameters as the rule's names: name them as the symbols.
+- `Text.FromFunction` reads the lambda's parameters as the rule's names: name them as the symbols. `Contains` reads its
+  condition the same way, with other names (`p`) from the closure, as writers: no calls inside it.
 - With several symbols, a rule without a relation between them matches every combination; say how they are related.
 - `Reachable` follows adjacencies both ways: from one contact it reaches its directory, and through it every other
   contact. Validate one object alone with `validate(schema, value)`.

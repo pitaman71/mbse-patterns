@@ -16,8 +16,8 @@
  *
  * - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match that fails
  *   one is never extended; those that read no symbol, only variables, are tested once, first.
- * - A conjunct `linked(a, 'adjacency', b)`, or `any(e in entries(a, 'adjacency'), e.link == b)`, relates two symbols
- *   through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
+ * - A conjunct `any(e in entries(a, 'adjacency'), e.link == b)`, as `Predicates.Contains(a.adjacency, (e) =>
+ *   e.link.eq(b))` writes it, relates two symbols through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
  *   relation's `unique` clauses makes `a`'s end determine the entry, there is at most one, and the hop is taken first.
  * - A symbol no hop reaches is scanned. Symbols that a hop from another could reach are scanned last, so that the hop
  *   is taken instead; otherwise symbols are scanned in their declared order.
@@ -44,7 +44,7 @@ export type Match = Record<string, Visitable>;
 /** A store that answers queries. */
 export interface QueryableStore extends Stores.Store {
   /** The predicate's matches for which its rule holds (or is unknown, with `unknown`), as they are read. */
-  select(predicate: Constraints.OfPredicate.Data, variables?: Variables | null, unknown?: boolean): IterableIterator<Match>;
+  select(predicate: Predicates.OfPredicate.Data, variables?: Variables | null, unknown?: boolean): IterableIterator<Match>;
 }
 
 /** The rule's top-level conjuncts: the arguments of nested `and`s, or the rule itself. */
@@ -72,29 +72,19 @@ interface Hop {
   functional: boolean;
 }
 
-/** The link and whether the hop is functional, for a hop from `source` through `adjacency`, if there is one. */
-function declaredHop(schemas: ReadonlyMap<string, Schemas.OfObject.Data>, source: string, adjacency: string | null,
-  link: string | null): [string, boolean] | null {
+/** Whether a hop from `source` through `adjacency` to its entries' `link` is functional; null if it is not a hop. */
+function functionalHop(schemas: ReadonlyMap<string, Schemas.OfObject.Data>, source: string, adjacency: string | null,
+  link: string): boolean | null {
   const declared = (schemas.get(source) as Schemas.OfObject.Data).adjacencies.get(adjacency ?? "");
   if (declared === undefined || declared.relation === null) return null;
   const relation = declared.relation;
-  const others = relation.links.filter((other) => other !== declared.me);
-  const chosen = link ?? (others.length === 1 ? (others[0] as string) : null);
-  if (chosen === null || !others.includes(chosen)) return null;
+  if (link === declared.me || !relation.links.includes(link)) return null;
   const fields = [...relation.links, ...relation.properties.keys()];
-  return [chosen, relation.uniques.some((unique) => fields.every((field) => unique.has(field) || field === declared.me))];
+  return relation.uniques.some((unique) => fields.every((field) => unique.has(field) || field === declared.me));
 }
 
-/** The hop a conjunct `linked(a, 'adjacency', b)` or `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a`
- * to `b`, if it is one. */
+/** The hop a conjunct `any(e in entries(a, 'adjacency'), e.link == b)` makes from `a` to `b`, if it is one. */
 function hopOf(conjunct: unknown, schemas: ReadonlyMap<string, Schemas.OfObject.Data>): Hop | null {
-  if (conjunct instanceof Predicates.OfLinked) {
-    const [source, target] = [variable(conjunct.source, schemas), variable(conjunct.target, schemas)];
-    const found = source === null || target === null || source === target ? null
-      : declaredHop(schemas, source, conjunct.adjacency as string, conjunct.link as string | null);
-    return found === null ? null
-      : { source: source as string, adjacency: conjunct.adjacency as string, link: found[0], target: target as string, functional: found[1] };
-  }
   if (!(conjunct instanceof E.OfQuantifier.Data && conjunct.quantifier === "any")) return null;
   const [collection, body, item] = [conjunct.collection, conjunct.body, conjunct.name as string];
   if (!(collection instanceof E.OfOperation.Data && collection.name === "entries" && collection.arguments.length === 2
@@ -106,8 +96,8 @@ function hopOf(conjunct: unknown, schemas: ReadonlyMap<string, Schemas.OfObject.
       && variable(get.arguments[0], new Set([item])) !== null && source !== null && target !== null
       && target !== source && target !== item) {
       const link = textOf(get.arguments[1]);
-      const found = link === null ? null : declaredHop(schemas, source, adjacency, link);
-      return found === null ? null : { source, adjacency: adjacency as string, link: found[0], target, functional: found[1] };
+      const functional = link === null ? null : functionalHop(schemas, source, adjacency, link);
+      return functional === null ? null : { source, adjacency: adjacency as string, link: link as string, target, functional };
     }
   }
   return null;
@@ -123,7 +113,7 @@ class Plan {
   readonly first: unknown[];
   readonly tests: unknown[][];
 
-  constructor(readonly store: Stores.Store, predicate: Constraints.OfPredicate.Data, variables: Variables) {
+  constructor(readonly store: Stores.Store, predicate: Predicates.OfPredicate.Data, variables: Variables) {
     const symbols = new Map(predicate.symbols) as Map<string, Schemas.OfObject.Data>;
     for (const [symbol, schema] of symbols) {
       if (!(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null)) {
@@ -252,18 +242,18 @@ export class Scan implements QueryableStore {
     return this.store.random();
   }
 
-  select(predicate: Constraints.OfPredicate.Data, variables: Variables | null = null, unknown = false): Generator<Match> {
+  select(predicate: Predicates.OfPredicate.Data, variables: Variables | null = null, unknown = false): Generator<Match> {
     return new Plan(this.store, predicate, variables ?? {}).matches(unknown);
   }
 
   /** The plan of a query, one line per symbol: how its candidates are found, and the tests then made. */
-  explain(predicate: Constraints.OfPredicate.Data, variables: Variables | null = null): string[] {
+  explain(predicate: Predicates.OfPredicate.Data, variables: Variables | null = null): string[] {
     return new Plan(this.store, predicate, variables ?? {}).explain();
   }
 }
 
 /** `store.select(...)` for a queryable store, and a scan of any other. */
-export function select(store: Stores.Store, predicate: Constraints.OfPredicate.Data, variables: Variables | null = null,
+export function select(store: Stores.Store, predicate: Predicates.OfPredicate.Data, variables: Variables | null = null,
   unknown = false): IterableIterator<Match> {
   const queryable = "select" in store && typeof (store as Partial<QueryableStore>).select === "function"
     ? store as QueryableStore : new Scan(store);
