@@ -23,6 +23,8 @@ and `typescript5/`.
 
 ## Invariants when changing code
 
+- **The README opens with why.** Its first sentence or paragraph says, TL;DR style, why this repository exists, in
+  the terms of `MBSE.md`; what it is comes after. Keep that opening true as the repository changes.
 - **Every human-facing document has navigation.** A `{previous, home, next}` line heads and ends each document in
   reading order (README, MBSE.md, tutorials, design, conformance, packages and test plans); after adding, renaming or
   retitling one, run `python3 ../mbse-schemas/scripts/nav.py .`. Link text is human-readable, never a path.
