@@ -1,3 +1,6 @@
+<!-- nav -->
+[← Python package](../README.md) · [Home](../../README.md) · [TypeScript package →](../../typescript5/README.md)
+
 # Test plan
 
 One suite per notebook, with the same case IDs, in the same order, in both implementations; each case is a markdown
@@ -20,3 +23,8 @@ only its differences.
 
 Patterns, distributions, the pseudorandom generator, generators and characterizers (designed in `docs/PATTERNS.md`,
 not built); standing and asynchronous queries; native queries of a database store.
+
+---
+
+<!-- nav -->
+[← Python package](../README.md) · [Home](../../README.md) · [TypeScript package →](../../typescript5/README.md)

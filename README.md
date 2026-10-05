@@ -1,3 +1,6 @@
+<!-- nav -->
+[Why the mbse repositories exist →](MBSE.md)
+
 # mbse-patterns
 
 `mbse-patterns` makes a specification's rules about populations of data executable: which combinations of objects
@@ -62,7 +65,7 @@ Queries.select(store, IsAnAdult);
 A pattern is a predicate whose rule weighs alternatives (`Distributions.Choices`) and draws values from distributions
 (uniform, normal, Poisson, geometric, categorical); a sampler draws a store's matches by weight, and a generator builds
 new data, redrawing until the predicate holds, byte-identical in both languages from a seed. Characterizers that fit distributions to data are designed
-([docs/PATTERNS.md](docs/PATTERNS.md)) for the next release.
+([the design](docs/PATTERNS.md)) for the next release.
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
 (`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a rule from a
@@ -101,6 +104,11 @@ npm run coverage
 
 - Tutorials, seven case studies that build from a rule to generated test data: [Python](python3/tutorials/README.md)
   and [TypeScript](typescript5/tutorials/README.md)
-- [docs/PATTERNS.md](docs/PATTERNS.md): the design, the planned releases and the open questions
-- [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md): a skill for AI agents using the package
-- [AGENTS.md](AGENTS.md): for agents changing it; [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md): the two implementations
+- [Patterns design](docs/PATTERNS.md): the design, the planned releases and the open questions
+- [Agent skill](skills/mbse-patterns/SKILL.md): a skill for AI agents using the package
+- [Guide for AI agents](AGENTS.md): for agents changing it; [Equivalence](docs/EQUIVALENCE.md): the two implementations
+
+---
+
+<!-- nav -->
+[Why the mbse repositories exist →](MBSE.md)

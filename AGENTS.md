@@ -23,6 +23,9 @@ and `typescript5/`.
 
 ## Invariants when changing code
 
+- **Every human-facing document has navigation.** A `{previous, home, next}` line heads and ends each document in
+  reading order (README, MBSE.md, tutorials, design, conformance, packages and test plans); after adding, renaming or
+  retitling one, run `python3 ../mbse-schemas/scripts/nav.py .`. Link text is human-readable, never a path.
 - **Parallel work happens in workspaces.** Agents working at the same time each get a workspace from
   `python3 scripts/siblings.py workspace <dir> --branch <name>` (with `--edit <sibling>` for a change that spans
   repositories), install there, and `land` it when done. A worktree of this repository alone, such as an agent's

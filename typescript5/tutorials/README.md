@@ -1,3 +1,6 @@
+<!-- nav -->
+[← 7 · Generating test data (Python)](../../python3/tutorials/07_Generating_Test_Data.ipynb) · [Home](../../README.md) · [1 · Rules your data must keep →](01_Rules_Your_Data_Must_Keep.ipynb)
+
 # Tutorial: rules, queries and patterns in seven case studies (TypeScript)
 
 This tutorial teaches mbse-patterns by solving real problems, one per notebook, each building on the ones before it.
@@ -8,7 +11,7 @@ mbse-expressions' expressions; you don't need its tutorial first, but it explain
 It's written for TypeScript programmers who keep rules about their data in more than one place, and who need test data
 that looks like production's. It's a port of the [Python tutorial](../../python3/tutorials/README.md), with the same
 case studies, the same reasoning and the same outputs: the generated contacts in case study 7 are the Python ones, seed
-for seed. The design document, [`../../docs/PATTERNS.md`](../../docs/PATTERNS.md), is the reference for everything here.
+for seed. The [design document](../../docs/PATTERNS.md) is the reference for everything here.
 
 Where the bindings differ, the code follows TypeScript idioms:
 
@@ -46,3 +49,8 @@ lists contacts in the store's directory.
 | 5 | [The shape of a population](05_The_Shape_Of_A_Population.ipynb) | A believable mix, which no one record breaks | Patterns as predicates; `Choices`, weights, counts and precedence; `weigh`; sampling a store |
 | 6 | [Drawing values](06_Drawing_Values.ipynb) | Ages around 70, never under 65 | Distributions of values; witnesses and supports; type checks; mixtures as choices |
 | 7 | [Generating test data](07_Generating_Test_Data.ipynb) | Reproducible data in production's mix | `Generate`; seeds and streams; rejection and its cost; generated data as ordinary data; what a generator can't build |
+
+---
+
+<!-- nav -->
+[← 7 · Generating test data (Python)](../../python3/tutorials/07_Generating_Test_Data.ipynb) · [Home](../../README.md) · [1 · Rules your data must keep →](01_Rules_Your_Data_Must_Keep.ipynb)

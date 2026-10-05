@@ -1,3 +1,6 @@
+<!-- nav -->
+[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
+
 # Equivalence
 
 The Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations have the same modules, names, error
@@ -30,3 +33,8 @@ language. Any other difference is a bug.
 | A distribution's conditions written by a function | `.requires(lambda person, age: person.age == age)`, read as `FromFunction` reads it: its parameters are the names, outer and bound | `.requires((age) => person.age.eq(age))`, called with the variable of the distribution's symbol; outer names come from the closure | a JavaScript function has no Python source, and a bundler renames a parameter that shadows an outer name | DST-03, GEN-06 |
 | A choices' count written by a function | `.count(lambda c: c >= 1)`, read as `FromFunction` reads it | `.count((c) => c.ge(1n))`, called with a variable named after its parameter, read from its source | as above | DST-01 |
 | A distribution's symbol before `.symbol(...)` | `n.age` raises `AttributeError` | `n.age` is `undefined`; a function in `.requires` raises `TypeError` | a proxy's missing property | DST-03 |
+
+---
+
+<!-- nav -->
+[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)

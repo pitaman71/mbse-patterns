@@ -1,8 +1,11 @@
+<!-- nav -->
+[← TypeScript package](../README.md) · [Home](../../README.md)
+
 # Test plan (TypeScript)
 
-The suites, cases and order are Python's ([python3/tests/TestPlan.md](../../python3/tests/TestPlan.md)); this lists
+The suites, cases and order are Python's (the [Python test plan](../../python3/tests/TestPlan.md)); this lists
 only what differs. The deliberate differences between the implementations are in
-[docs/EQUIVALENCE.md](../../docs/EQUIVALENCE.md).
+[Equivalence](../../docs/EQUIVALENCE.md).
 
 - Each case's code is a block (`{ ... }`), since a notebook runs as one module.
 - `run-notebooks.ts` runs the notebooks headless, each in its own process; `--typecheck` type-checks them first.
@@ -15,3 +18,8 @@ only what differs. The deliberate differences between the implementations are in
   `bigint`s.
 - DST-03 refuses a function in a distribution's `.requires(...)` before its symbol is set, since TypeScript calls the
   function with the symbol's variable; Python reads the function's parameters instead.
+
+---
+
+<!-- nav -->
+[← TypeScript package](../README.md) · [Home](../../README.md)

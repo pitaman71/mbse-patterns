@@ -1,10 +1,13 @@
+<!-- nav -->
+[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Equivalence →](EQUIVALENCE.md)
+
 # Patterns
 
 Constraints, queries and patterns over [mbse-schemas](https://github.com/pitaman71/mbse-schemas) data, built on the
 rules of [mbse-expressions](https://github.com/pitaman71/mbse-expressions). This package depends on both (sibling
 checkouts, pinned in `siblings.json`). Their design documents,
-[`FRAMEWORK.md`](https://github.com/pitaman71/mbse-schemas/blob/main/docs/FRAMEWORK.md) and
-[`EXPRESSIONS.md`](https://github.com/pitaman71/mbse-expressions/blob/main/docs/EXPRESSIONS.md), describe the schemas
+[framework design](https://github.com/pitaman71/mbse-schemas/blob/main/docs/FRAMEWORK.md) and
+[expressions design](https://github.com/pitaman71/mbse-expressions/blob/main/docs/EXPRESSIONS.md), describe the schemas
 and the rules; this document covers what is built from them.
 
 It is planned in releases, each landed and reviewed before the next:
@@ -335,3 +338,8 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - A predicate links its rule through `Expressions.Arguments`, whose argument end Basic's kinds already declare
   (`used_by`), so mbse-schemas' validation accepts the link; a relation of this package's would need Basic's kinds to
   declare it.
+
+---
+
+<!-- nav -->
+[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Equivalence →](EQUIVALENCE.md)
