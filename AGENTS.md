@@ -12,6 +12,7 @@ and `typescript5/`.
 
 | You want to | Read |
 |---|---|
+| Know why the mbse repositories exist, and this one's part in them | [MBSE.md](MBSE.md) |
 | Use the library: write predicates, validate data, query a store | [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md), a skill. It loads its references only as needed |
 | Learn it by example, from a rule to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), seven case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
 | Understand a design rule, a planned release or an open question | [docs/PATTERNS.md](docs/PATTERNS.md), by section |

@@ -4,6 +4,10 @@
 
 A pattern is a predicate whose rule weighs alternatives (choices of weighted arms) and draws values from distributions (uniform, normal, Poisson, geometric, categorical), sampled exactly; samplers draw a store's matches by weight, and generators build new data, redrawing until the predicate holds, byte-identically in both languages from one seed. Streaming characterizers are designed for the next release.
 
+## Why
+
+- [MBSE.md](https://github.com/pitaman71/mbse-patterns/blob/main/MBSE.md): executable specifications, and each mbse repository's part in them
+
 ## Using it
 
 - [Agent skill](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/SKILL.md): when to use it, the rules that prevent most mistakes, and references loaded per task

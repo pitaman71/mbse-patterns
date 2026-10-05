@@ -1,5 +1,11 @@
 # mbse-patterns
 
+`mbse-patterns` makes a specification's rules about populations of data executable: which combinations of objects
+are valid, which must or mustn't be linked, and what realistic data looks like. One predicate checks implementations'
+data, finds it, and generates test data, so the specification is also the test oracle and the fixture, instead of rules
+copied into validation code, queries and test fixtures. It is part of the mbse repositories'
+[executable specifications](MBSE.md).
+
 Predicates and queries over [mbse-schemas](https://github.com/pitaman71/mbse-schemas) data, written with the rules of
 [mbse-expressions](https://github.com/pitaman71/mbse-expressions). A predicate, such as "a contact is an adult" or "a
 contact's phone has a number", is a named rule over symbols, each bound to an object of a schema, kept as data beside
