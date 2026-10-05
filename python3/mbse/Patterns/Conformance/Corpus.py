@@ -12,7 +12,7 @@ from mbse.Expressions import Expressions as E
 from mbse.Patterns import Constraints as C, Distributions as D, Generators as G, Predicates as P
 from mbse.Schemas.Framework import Proxies, Schemas as S, Stores
 
-CASES = ["predicates", "empty", "algebra", "weights", "generated"]
+CASES = ["predicates", "empty", "algebra", "weights", "generated", "drawn"]
 
 
 def build():
@@ -79,10 +79,31 @@ def build():
         contact = next(generated)["person"]
         book.Directory(directory).contacts(lambda e, contact=contact: e.contact(contact)).update()
 
+    # --- drawn: cases whose draws fill what their predicates leave open, from every kind of distribution, and twelve
+    #     contacts generated from them, from the seed 7 ---
+    drawing = D.OfWeights.Builder().name("People").symbols(APerson).decreasing(
+        lambda wt: wt.weight(1).requires(lambda pred: pred.symbols(APerson).requires(pred.person.age.ge(65)))
+        .draw(wt.person.age, D.Normal(lambda n: n.mean(70).deviation(8).rounded()))
+        .draw(wt.person.name, D.Categorical(lambda c: c.option(3, "ann").option(1, "bo"))),
+        lambda wt: wt.weight(3).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "cy")))
+        .draw(wt.person.age, D.Mixture(lambda m: m.option(1, D.Uniform(lambda u: u.low(18).high(64)))
+                                       .option(1, D.Poisson(lambda p: p.rate(30)))
+                                       .option(1, D.Geometric(lambda g: g.probability(0.05))))),
+    ).create()
+    drawn = Proxies.OfStore()
+    for schema in (Contact, Phone, Phones, Listed, Directory):
+        drawn.register(schema)
+    listing = drawn.Directory().create()
+    people = G.Generate(drawn, drawing, Stores.PCG32(7))
+    for _ in range(12):
+        contact = next(people)["person"]
+        drawn.Directory(listing).contacts(lambda e, contact=contact: e.contact(contact)).update()
+
     return {
         "predicates": (C.OfSet.Schema, predicates, store),
         "empty": (C.OfSet.Schema, empty, store),
         "algebra": (C.OfSet.Schema, algebra, store),
         "weights": (D.OfWeights.Schema, weights, store),
         "generated": (Directory, directory, book),
+        "drawn": (Directory, listing, drawn),
     }

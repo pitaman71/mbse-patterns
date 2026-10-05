@@ -53,10 +53,11 @@ Validators.Validate(store, [IsAnAdult, HasAPhone]).Reachable(Contact, ann);
 Queries.select(store, IsAnAdult);
 ```
 
-Distributions weigh a population of matches by cases of predicates, each used by reference or inline; a sampler draws
-a store's matches by weight, and a generator builds new data, byte-identical in both languages from a seed.
-Distributions of property values and characterizers that fit distributions to data are designed
-([docs/PATTERNS.md](docs/PATTERNS.md)) for the next releases.
+Distributions weigh a population of matches by cases of predicates, each used by reference or inline, and each case
+draws the properties it leaves open from distributions of values (uniform, normal, Poisson, geometric, categorical,
+mixture); a sampler draws a store's matches by weight, and a generator builds new data, redrawing until each case holds,
+byte-identical in both languages from a seed. Characterizers that fit distributions to data are designed
+([docs/PATTERNS.md](docs/PATTERNS.md)) for the next release.
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
 (`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a rule from a

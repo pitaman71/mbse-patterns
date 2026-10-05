@@ -25,4 +25,6 @@ language. Any other difference is a bug.
 | Weights | floats; an `int` weight is refused by `Sampling.weighted` | numbers, all floats | TypeScript has one number type | GEN-01 |
 | Random words and bounds | `int`s | `bigint`s (`next_u32()`, `below(random, 6n)`, `PCG32(42n)`) | as mbse-schemas' `Stores.Random` | GEN-01 |
 | What a generator sets | `settings(predicate)` is `{symbol: {property: value}}`, dicts | `Map`s of `Map`s | the language's own mappings | GEN-02 |
-| Samples and generated matches | iterators of dicts | generators of records | the language's own streams | DST-04, GEN-02 |
+| Samples and generated matches | an iterator of dicts; `Generate` gives a `Generation`, an iterator with `steps` and `rejected` | a generator of records; `Generate` gives a `Generation`, an `IterableIterator` with `steps` and `rejected` | the language's own streams | DST-04, GEN-02, GEN-06 |
+| Parameters of distributions of values | ints and floats | `bigint`s and numbers (`Normal((n) => n.mean(70n).deviation(8n))`); ints drawn (a rounded normal, a Poisson, a geometric, an int uniform) are `bigint`s | integers are `bigint`s | DST-06, GEN-05, GEN-06 |
+| A case's symbols before `.requires(...)` | `wt.person` raises `AttributeError` | `wt.person` is `undefined` | a proxy's missing property | DST-06 |

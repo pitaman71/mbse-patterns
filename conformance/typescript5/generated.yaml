@@ -45,7 +45,7 @@ objects:
         $ref: s0
         $schema: Directory
   s2:
-    name: davi
+    name: chermon
     directories:
     - directory:
         $ref: s0
@@ -57,13 +57,13 @@ objects:
         $ref: s0
         $schema: Directory
   s4:
-    name: davi
+    name: ben
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s5:
-    name: alice
+    name: chermon
     directories:
     - directory:
         $ref: s0
@@ -75,25 +75,25 @@ objects:
         $ref: s0
         $schema: Directory
   s7:
-    name: alice
+    name: chermon
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s8:
-    name: davi
+    name: ben
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s9:
-    name: alice
+    name: ben
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s10:
-    name: ben
+    name: davi
     directories:
     - directory:
         $ref: s0
@@ -105,7 +105,7 @@ objects:
         $ref: s0
         $schema: Directory
   s12:
-    name: chermon
+    name: davi
     directories:
     - directory:
         $ref: s0

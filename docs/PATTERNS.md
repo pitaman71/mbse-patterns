@@ -14,7 +14,7 @@ It is planned in releases, each landed and reviewed before the next:
 | 0.1 | [Predicates](#predicates), [validators](#validators), [queries](#queries) and the queryable in-memory store | built |
 | 0.2 | [The predicate algebra](#the-predicate-algebra) and [pseudorandom numbers](#pseudorandom-numbers) | built |
 | 0.3 | [Parameters and application](#parameters-and-application), [distributions](#distributions), [sampling](#pseudorandom-numbers) and [generators](#generators) | built |
-| 0.4 | [Distributions of values](#distributions-of-values), filling what cases leave open | designed |
+| 0.4 | [Distributions of values](#distributions-of-values), filling what cases leave open | built |
 | 0.5 | [Characterizers](#characterizers), which fit distributions from streams of data | designed |
 
 ```
@@ -201,20 +201,31 @@ identically.
 
 ## Distributions of values
 
-Planned for 0.4. A distribution of a property's values, for what a distribution's cases leave open.
+Built in 0.4. A distribution of a property's values, for what a distribution's cases leave open: weights over
+predicates choose a case, and distributions of values within it fill the properties.
 
-- **Distributions of values are terms**: `Constant`, `Uniform` (ints and floats), `Normal`, `Categorical`, `Poisson`
-  and `Geometric` (for counts), and `Mixture`, built by builders as the algebra's terms are
-  (`Normal(lambda n: n.mean(72).deviation(5))`). Parameters are Basic expressions, so one distribution may depend on
-  what is already drawn.
-- **A distribution has a domain**, inferred like a Basic expression's; a sample outside a property's schema is refused
-  when the distribution is checked, not when it is sampled.
-- **Sampling stays exact**: normals by the polar method and Poissons by inversion need `log` and `exp`, which are
-  ported (fdlibm's) to both languages with only IEEE 754's correctly rounded operations, since each language's own may
-  differ in the last place; Box–Muller's `cos` is avoided.
-- **Cases choose, values fill**: a generator sets what the chosen case requires by equality, draws the other
-  properties from their distributions, and redraws, up to a bound, when the case does not hold of what it drew,
-  reporting the rejection rate.
+- **Distributions of values are terms**, built by builders as the algebra's are: `Uniform(lambda u: u.low(18).high(64))`
+  (ints in [low, high] when both bounds are ints, else floats in [low, high)), `Normal(lambda n:
+  n.mean(70).deviation(8))` (floats, or ints rounded half up with `.rounded()`), `Poisson(lambda p: p.rate(1.5))` and
+  `Geometric(lambda g: g.probability(0.3))` (ints, for counts), `Categorical(lambda c: c.option(3, "ann").option(1,
+  "bo"))` (values by weight) and `Mixture(lambda m: m.option(1, Normal(...)).option(2, Poisson(...)))` (distributions
+  by weight). Any other expression is a constant. Parameters are expressions, evaluated when a value is drawn, so one
+  may read what is already set or drawn (`Uniform(lambda u: u.low(wt.item.a).high(wt.item.a))`).
+- **A case draws the properties it leaves open**: `wt.weight(3).requires(...).draw(wt.person.age, Normal(...))`, an
+  `OfDraw` (`Patterns.OfDraw`) of a symbol's property and a distribution. After `.requires(...)`, the case builder gives
+  its predicate's symbols as variables; a case binds them within its draws.
+- **A distribution has a domain** (`domain(distribution)`: `int`, `float`, `str` or `bool`, or none when it cannot be
+  told without drawing), and a draw is checked against its property's type when the distribution is checked: "case 0:
+  draw 0: person.age is int, but its distribution gives float". A draw of a property the symbol's schema does not
+  have, or of something that is not a symbol's property, is refused too.
+- **Sampling stays exact**: normals by Marsaglia's polar method and Poissons by inversion need `log` and `exp`, which
+  are ported after fdlibm's algorithms to both languages with only IEEE 754's exact or correctly rounded operations,
+  since each language's own may differ in the last place (V8's `Math.log` differs from the port once in about a
+  hundred values); Box–Muller's `cos` is avoided. A Poisson's rate over 500 is drawn as a sum of Poissons of 500, so
+  that `exp(-rate)` stays normal. The `drawn` case of the conformance corpus generates from every kind of distribution,
+  byte-identically in both languages.
+- **Cases choose, values fill** ([Generators](#generators)): a generator sets what the chosen case requires by
+  equality, draws the other properties, and redraws when the case does not hold of what it drew.
 
 ## Pseudorandom numbers
 
@@ -239,19 +250,25 @@ from the same seed, as all output of the two implementations is, and the caller 
 
 ## Generators
 
-Built in 0.3. `Generators.Generate(store, weights, random)` streams matches of new objects, built with the
-store's builders. Generated data is ordinary data: transient until linked to the store's data, then validated, queried
-and serialized as any other.
+Built in 0.3, with draws in 0.4. `Generators.Generate(store, weights, random)` streams matches of new objects, built
+with the store's builders: a `Generation`, an iterator that counts the `steps` it has taken and the attempts it
+`rejected`. Generated data is ordinary data: transient until linked to the store's data, then validated, queried and
+serialized as any other.
 
 - **Each step draws from its own stream**, `random.split(str(step))`, so a step's objects do not depend on how many
-  were drawn before it, and one seed gives the same data in both languages.
-- **A step chooses a case by weight, and builds what it requires by equality**: for each symbol, an object of its
-  schema whose properties are those the case's predicate sets with a conjunct `x.p == v` (or `v == x.p`), `v` a
-  literal, following conjunctions and applications of predicates, whose symbols and parameters are bound to their
-  arguments (`settings(predicate)` gives them).
-- **What it builds must weigh what the case says**: the case must be the first whose predicate holds of the objects,
-  or the generator raises `ValueError` ("case 1 cannot be generated from its equalities: what they build satisfies case
-  0"). Drawing the properties a case leaves open is [planned](#distributions-of-values).
+  were drawn before it, and one seed gives the same data in both languages. The case is chosen by weight from the
+  step's stream split by `"case"`.
+- **Equalities set, draws fill**: for each symbol, an object of its schema whose properties are first those the case's
+  predicate sets with a conjunct `x.p == v` (or `v == x.p`), `v` a literal, following conjunctions and applications of
+  predicates (`settings(predicate)` gives them), and then those its draws draw, in order, each from its own stream
+  split from the attempt's by `"symbol.property"`, so that adding a draw does not change the others. A property an
+  equality sets is not drawn.
+- **What it builds must weigh what the case says**: the case must be the first whose predicate holds of the objects.
+  If it is not, the step draws again, from its stream split by `"attempt 1"`, `"attempt 2"`, ..., up to `ATTEMPTS`
+  (100) in all, and raises `ValueError` if none holds ("case 0 cannot be generated: none of its 100 attempts satisfies
+  it"); a case without draws builds the same objects every time, so it has one attempt ("case 1 cannot be generated
+  from its equalities: what they build satisfies case 0"). Rejection makes a case's draws its distributions
+  conditioned on its predicate: seniors' ages are a normal restricted to 65 and over.
 
 ## Characterizers
 
@@ -274,7 +291,8 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - Asynchronous queries (`AsyncIterator`) for stores whose reads are asynchronous, in TypeScript especially.
 - Predicates over value objects: a match binds reference objects, from extents; a rule about a value object is
   written today as a rule about its owner.
-- Checking statically that what a generator draws satisfies the chosen case (a solver), rather than by rejection.
+- Checking statically that what a generator draws satisfies the chosen case (a solver), rather than by rejection, and
+  drawing from a distribution truncated to the case directly.
 - Generating related objects: a case that requires links (`Exists`, `Contains`) between its symbols, or to objects the
   store already holds, and distributions of an adjacency's number of entries.
 - Other ways to combine cases than decreasing precedence: independent cases whose weights multiply, and proportions
@@ -296,7 +314,8 @@ entries, from a family the caller chooses (or the best of several by a criterion
   store; reading resolves the names in one.
 - Queries are this package's, not an extension in mbse-expressions; mbse-expressions keeps the rules.
 - A query streams lazily over the store's data first; standing queries come later.
-- A population is layered: weights over predicates (cases), and distributions of values within each case.
+- A population is layered: weights over predicates (cases), and distributions of values within each case, as its
+  draws; a draw is checked against its property's type.
 - Generated data is byte-identical across implementations from a seed.
 - A random source is given to whatever draws from it (`Stores.Random`, in mbse-schemas), not held by a store, which
   is data access alone; PCG32 is the reference source, and streams split by key from the seed, not from what was

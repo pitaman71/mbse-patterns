@@ -83,17 +83,22 @@ assert [(m["c"].name, m["p"].number) for m in query.select(numbered)] == [("Ann"
 assert list(query.select(IsAnAdult, unknown=True)) == [{"the": ann}, {"the": bob}]
 
 # Parameters: a predicate applied by reference, to a symbol and a value. Distributions weigh cases of predicates, given
-# by reference or inline, in decreasing precedence; a generator builds new data from them, from the store's seed.
+# by reference or inline, in decreasing precedence, and each case draws what it leaves open from distributions of
+# values; a generator builds new data from them, from a seed, redrawing until each case holds.
 HasName = (Predicates.OfPredicate.Builder().name("HasName").symbols({"person": Contact})
            .parameters(lambda p: p.name("name"))
            .requires(Text.FromFunction(lambda person, name: person.name == name)).create())
 APerson = {"person": Contact}
 Names = Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
-    lambda wt: wt.weight(3).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Cy"))),
-    lambda wt: wt.weight(1).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Di")))).create()
-generated = Generators.Generate(store, Names, Stores.PCG32(42))  # new contacts, named as the cases say, from a seed
-names = [next(generated)["person"].name for _ in range(400)]
-assert set(names) == {"Cy", "Di"} and 250 < names.count("Cy") < 350  # about 3 to 1
+    lambda wt: wt.weight(3).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Cy")))
+    .draw(wt.person.age, Distributions.Uniform(lambda u: u.low(18).high(64))),  # ints, 18 to 64
+    lambda wt: wt.weight(1).requires(lambda pred: pred.symbols(APerson).requires(HasName(pred.person, "Di"))
+                                     .requires(pred.person.age.ge(65)))  # drawn again until 65 or over
+    .draw(wt.person.age, Distributions.Normal(lambda n: n.mean(70).deviation(8).rounded()))).create()
+generated = Generators.Generate(store, Names, Stores.PCG32(42))  # new contacts, as the cases say
+people = [next(generated)["person"] for _ in range(400)]
+assert {p.name for p in people} == {"Cy", "Di"} and 250 < sum(p.name == "Cy" for p in people) < 350  # about 3 to 1
+assert all(18 <= p.age <= 64 if p.name == "Cy" else p.age >= 65 for p in people) and generated.rejected > 0
 ```
 
 ## Cheat sheet
@@ -116,7 +121,10 @@ Predicates.Evaluator(store)(rule, variables)                # evaluates the alge
 Distributions.OfWeights.Builder().symbols(S).decreasing(lambda wt: wt.weight(3).requires(spec), ...).create()
 Distributions.weight(Predicates.Evaluator(store), weights, match)          # the first holding case's weight, or 0.0
 Distributions.Sample(store, weights, Stores.PCG32(seed))    # the store's matches, drawn by weight
-Generators.Generate(store, weights, Stores.PCG32(seed))     # new objects: a case by weight, built from its equalities
+Generators.Generate(store, weights, Stores.PCG32(seed))     # new objects: a case by weight, its equalities, its draws
+wt.weight(3).requires(spec).draw(wt.person.age, Distributions.Normal(lambda n: n.mean(70).deviation(8).rounded()))
+Distributions.Uniform(lambda u: u.low(a).high(b)); Poisson(lambda p: p.rate(r)); Geometric(lambda g: g.probability(p))
+Distributions.Categorical(lambda c: c.option(3, "x").option(1, "y")); Mixture(lambda m: m.option(1, dist).option(2, dist))
 ```
 
 ## Traps
@@ -129,6 +137,8 @@ Generators.Generate(store, weights, Stores.PCG32(seed))     # new objects: a cas
 - A query's variables must not be named like its symbols, and an object variable is bound per match (it has no
   literal). A predicate's parameters are given as a query's variables, or by applying it; a validator refuses it.
 - A distribution's cases are in decreasing precedence: a match weighs what the first case that holds says, so put the
-  more specific cases first. A generator sets only what a case requires by equality (`x.p == v`, through applied
-  predicates), and refuses a case that what it builds does not satisfy.
+  more specific cases first. A generator sets what a case requires by equality (`x.p == v`, through applied
+  predicates), draws what its draws say, and redraws, up to 100 times, until the case is the first to hold.
+- A draw must give its property's type: a normal gives floats unless `.rounded()`; a uniform gives ints only when both
+  bounds are ints.
 - Sampling and generating take a random source, not a store's: the same seed gives the same draws, in both languages.

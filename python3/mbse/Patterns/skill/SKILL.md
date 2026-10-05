@@ -70,8 +70,9 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
    Shared predicates are written once. A validator refuses a predicate with parameters; a query takes them as
    variables.
 9. **A distribution's cases are in decreasing precedence**: a match weighs what the first case whose predicate holds
-   says. A generator chooses a case by weight and sets only what its predicate requires by equality, then checks that
-   the case is the first to hold; sampling and generating take a random source (`Stores.PCG32(seed)`).
+   says. A generator chooses a case by weight, sets what its predicate requires by equality, draws the rest from the
+   case's `.draw(wt.person.age, Normal(...))`s, and redraws until the case is the first to hold; a draw must give its
+   property's type. Sampling and generating take a random source (`Stores.PCG32(seed)`).
 10. **In TypeScript, integers are `bigint`s** (`18n`), rules are written with writers (there is no `FromFunction`, and
    `Contains` calls its condition with a variable: `(e) => e.phone.eq(p)`), a predicate is applied with
    `.call(...)`, and a validator's options are an object (`{ unknown: "ignore" }`).

@@ -82,17 +82,22 @@ check(same([...query.select(numbered)].map((m: any) => [m.c.name, m.p.number]), 
 check([...query.select(IsAnAdult, null, true)].length === 2, "with unknown");
 
 // Parameters: a predicate applied by reference, to a symbol and a value. Distributions weigh cases of predicates, given
-// by reference or inline, in decreasing precedence; a generator builds new data from them, from the store's seed.
+// by reference or inline, in decreasing precedence, and each case draws what it leaves open from distributions of
+// values; a generator builds new data from them, from a seed, redrawing until each case holds.
 const HasName = new Predicates.OfPredicate.Builder().name("HasName").symbols({ person: Contact })
   .parameters((x) => x.name("name")).requires(E.variable("person").name.eq(E.variable("name"))).create();
 const APerson = { person: Contact };
 const Names = new Distributions.OfWeights.Builder().name("Names").symbols(APerson).decreasing(
-  (wt) => wt.weight(3).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Cy"))),
-  (wt) => wt.weight(1).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Di")))).create();
-const generated = Generators.Generate(store, Names, new Stores.PCG32(42n)); // new contacts, named as the cases say
-const names = Array.from({ length: 400 }, () => (generated.next().value as any).person.name);
-const cy = names.filter((n) => n === "Cy").length;
-check(new Set(names).size === 2 && cy > 250 && cy < 350, "generated"); // about 3 to 1
+  (wt) => wt.weight(3).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Cy")))
+    .draw(wt.person.age, Distributions.Uniform((u) => u.low(18n).high(64n))), // ints, 18 to 64
+  (wt) => wt.weight(1).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "Di"))
+    .requires(pred.person.age.ge(65n))) // drawn again until 65 or over
+    .draw(wt.person.age, Distributions.Normal((n) => n.mean(70n).deviation(8n).rounded()))).create();
+const generated = Generators.Generate(store, Names, new Stores.PCG32(42n)); // new contacts, as the cases say
+const people = Array.from({ length: 400 }, () => (generated.next().value as any).person);
+const cy = people.filter((x) => x.name === "Cy").length;
+check(new Set(people.map((x) => x.name)).size === 2 && cy > 250 && cy < 350, "generated"); // about 3 to 1
+check(people.every((x) => x.name === "Cy" ? x.age >= 18n && x.age <= 64n : x.age >= 65n) && generated.rejected > 0, "drawn");
 ```
 
 ## Differences from Python

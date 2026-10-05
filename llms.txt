@@ -2,7 +2,7 @@
 
 > Predicates, queries, distributions and generators over mbse-schemas data, with mbse-expressions' rules. A predicate is a rule over symbols, each bound to an object of a schema, and parameters, kept as data beside the schemas, built fluently, as schemas are, and used by reference (applied to arguments); it applies to matches, combinations of objects. Validators check data against predicates, three-valued (unknown is not false), and queries find a store's matches, streaming lazily, planned from the rule's shape (early tests, hops through relations, `unique` clauses), through a queryable-store protocol with an in-memory implementation over any store. Equivalent Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations write byte-identical JSON.
 
-Distributions weigh matches by cases of predicates, in decreasing precedence; samplers draw a store's matches by weight, and generators build new data from them, byte-identically in both languages from one seed. Distributions of property values and streaming characterizers are designed for the next releases.
+Distributions weigh matches by cases of predicates, in decreasing precedence; samplers draw a store's matches by weight, and generators build new data from them, byte-identically in both languages from one seed. Each case draws the properties it leaves open from distributions of values (uniform, normal, Poisson, geometric, categorical, mixture), sampled exactly, and a generator redraws until the case holds. Streaming characterizers are designed for the next release.
 
 ## Using it
 

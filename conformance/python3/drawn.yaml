@@ -39,73 +39,85 @@ objects:
         $ref: s12
         $schema: Contact
   s1:
-    name: chermon
+    name: ann
+    age: 69
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s2:
-    name: chermon
+    name: bo
+    age: 69
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s3:
-    name: chermon
+    name: cy
+    age: 27
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s4:
-    name: ben
+    name: bo
+    age: 81
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s5:
-    name: chermon
+    name: cy
+    age: 26
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s6:
-    name: ben
+    name: cy
+    age: 36
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s7:
-    name: chermon
+    name: bo
+    age: 68
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s8:
-    name: ben
+    name: cy
+    age: 53
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s9:
-    name: ben
+    name: cy
+    age: 27
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s10:
-    name: davi
+    name: cy
+    age: 57
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s11:
-    name: chermon
+    name: cy
+    age: 2
     directories:
     - directory:
         $ref: s0
         $schema: Directory
   s12:
-    name: davi
+    name: ann
+    age: 66
     directories:
     - directory:
         $ref: s0

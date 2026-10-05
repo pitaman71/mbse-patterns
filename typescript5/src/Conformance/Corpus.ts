@@ -16,7 +16,7 @@ import * as D from "../Distributions.js";
 import * as G from "../Generators.js";
 import * as P from "../Predicates.js";
 
-export const CASES = ["predicates", "empty", "algebra", "weights", "generated"];
+export const CASES = ["predicates", "empty", "algebra", "weights", "generated", "drawn"];
 
 export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Stores.Store]> {
   const text = (name: string) => (p: any) => p.name(name).of((t: any) => t.as_native(String));
@@ -80,11 +80,32 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
     book.Directory(directory).contacts((e: any) => e.contact(contact)).update();
   }
 
+  // --- drawn: cases whose draws fill what their predicates leave open, from every kind of distribution, and twelve
+  //     contacts generated from them, from the seed 7 ---
+  const drawing = new D.OfWeights.Builder().name("People").symbols(APerson).decreasing(
+    (wt) => wt.weight(1).requires((pred) => pred.symbols(APerson).requires(pred.person.age.ge(65n)))
+      .draw(wt.person.age, D.Normal((n) => n.mean(70n).deviation(8n).rounded()))
+      .draw(wt.person.name, D.Categorical((c) => c.option(3, "ann").option(1, "bo"))),
+    (wt) => wt.weight(3).requires((pred) => pred.symbols(APerson).requires(HasName.call(pred.person, "cy")))
+      .draw(wt.person.age, D.Mixture((m) => m.option(1, D.Uniform((u) => u.low(18n).high(64n)))
+        .option(1, D.Poisson((p) => p.rate(30n)))
+        .option(1, D.Geometric((g) => g.probability(0.05))))),
+  ).create();
+  const drawn: any = new Proxies.OfStore();
+  for (const schema of [Contact, Phone, Phones, Listed, Directory]) drawn.register(schema);
+  const listing = drawn.Directory().create();
+  const people = G.Generate(drawn, drawing, new Stores.PCG32(7n));
+  for (let i = 0; i < 12; i++) {
+    const contact = people.next().value!["person"];
+    drawn.Directory(listing).contacts((e: any) => e.contact(contact)).update();
+  }
+
   return new Map([
     ["predicates", [C.OfSet.Schema, predicates, store] as const],
     ["empty", [C.OfSet.Schema, empty, store] as const],
     ["algebra", [C.OfSet.Schema, algebra, store] as const],
     ["weights", [D.OfWeights.Schema, weights, store] as const],
     ["generated", [Directory, directory, book] as const],
+    ["drawn", [Directory, listing, drawn] as const],
   ]);
 }
