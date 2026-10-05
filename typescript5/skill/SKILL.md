@@ -46,6 +46,8 @@ For the rules themselves (writing, evaluating, translating expressions), use the
 [mbse-expressions skill](https://github.com/pitaman71/mbse-expressions/blob/main/skills/mbse-expressions/SKILL.md);
 for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas/blob/main/skills/mbse-schemas/SKILL.md).
 
+Why the mbse repositories exist, and this one's part: [MBSE.md](https://github.com/pitaman71/mbse-patterns/blob/main/MBSE.md).
+
 ## Rules that prevent most mistakes
 
 1. **A symbol's schema is a named reference object schema**, as a store registers it. The rule's free names are the
