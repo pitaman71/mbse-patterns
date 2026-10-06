@@ -1,7 +1,7 @@
 # mbse-patterns in TypeScript
 
 Install `@mbse/patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions` and
-`Generators` from it, the rules' writers from
+`Generators` from it, the expressions' writers from
 `@mbse/expressions`, and the data's framework from `@mbse/schemas/Framework`. Everything matches Python, with the
 differences below.
 
@@ -32,7 +32,7 @@ const check = (condition: boolean, what: string) => {
 };
 const same = (a: Iterable<unknown>, b: unknown[]) => JSON.stringify([...a]) === JSON.stringify(b);
 
-// Predicates: named rules over symbols, built fluently, with conditions written with writers; the symbols are written
+// Predicates: named constraints over symbols, built fluently, with conditions written with writers; the symbols are written
 // as variables of the same names.
 const [the, c, p] = [E.variable("the"), E.variable("c"), E.variable("p")];
 const IsAnAdult = new Predicates.OfPredicate.Builder().name("IsAnAdult").description("18 or older")
@@ -40,7 +40,7 @@ const IsAnAdult = new Predicates.OfPredicate.Builder().name("IsAnAdult").descrip
 const owns = Predicates.Contains(c.phones, (e) => e.phone.eq(p)); // p is one of c's phones
 const OwnedNumbered = new Predicates.OfPredicate.Builder().name("OwnedNumbered").symbols({ c: Contact, p: Phone })
   .requires(E.operation("implies", owns, p.has("number"))).create();
-const rules = Constraints.check([IsAnAdult, OwnedNumbered]);
+const constraints = Constraints.check([IsAnAdult, OwnedNumbered]);
 
 // The algebra: quantifiers over a schema's objects, built as predicates are. Mandatory, forbidden and possible links.
 const HasAPhone = Predicates.Exists((q) => q.symbols({ p: Phone }).requires(owns));
@@ -59,21 +59,21 @@ store.Directory(store.singleton("book.Directory")).contacts((x: any) => x.contac
   (x: any) => x.contact(bob)).contacts((x: any) => x.contact(kid)).update();
 
 // Validation: every match among what the root reaches. Unknown is reported apart from false.
-const validate = Validators.Validate(store, rules);
+const validate = Validators.Validate(store, constraints);
 check(same(validate.Reachable(Directory, store.singleton("book.Directory")), [
   "the=Contact#2: 'IsAnAdult' is unknown", "the=Contact#3: 'IsAnAdult' does not hold",
   "c=Contact#2, p=Phone#5: 'OwnedNumbered' does not hold"]), "book");
-check(validate(Contact, ann).length === 0 && Validators.Validate(store, rules, { unknown: "ignore" })(Contact, bob).length === 0, "one");
+check(validate(Contact, ann).length === 0 && Validators.Validate(store, constraints, { unknown: "ignore" })(Contact, bob).length === 0, "one");
 const links = Validators.Validate(store, [EveryoneHasAPhone, Phoneless, Sometimes]);
 check(same(links(Contact, ann), ["the store: 'EveryoneHasAPhone' does not hold", "c=Contact#0: 'Phoneless' does not hold"]), "links");
 check(same(links(Contact, kid), ["the store: 'EveryoneHasAPhone' does not hold"]), "phoneless"); // the kid is phoneless, as allowed
 
 // Predicates are data: written by their symbols' schema names, read back through a store that resolves them.
-const text = SchemaJSON.ToJSON(Constraints.Builders).Reachable(Constraints.OfSet.Schema, rules);
+const text = SchemaJSON.ToJSON(Constraints.Builders).Reachable(Constraints.OfSet.Schema, constraints);
 const copy = SchemaJSON.FromJSON(new Constraints.OfStore(store)).Reachable(Constraints.OfSet.Schema, text) as Constraints.OfSet;
 check(same(copy.predicates.map((x: Predicates.OfPredicate) => x.name), ["IsAnAdult", "OwnedNumbered"]) && copy.predicates[0]!.symbols.get("the") === Contact, "copy");
 
-// Queries: matches stream lazily, planned from the rule's shape.
+// Queries: matches stream lazily, planned from the constraint's shape.
 const query = new Queries.Scan(store);
 check([...query.select(IsAnAdult)].map((m) => m["the"]).every((x) => x === ann), "adults");
 const numbered = new Predicates.OfPredicate.Builder().name("Numbered").symbols({ c: Contact, p: Phone })
@@ -104,13 +104,13 @@ check(people.every((x) => x.name === "Cy" ? x.age >= 18n && x.age <= 64n : x.age
 ## Differences from Python
 
 - Integers are `bigint`s (`18n`, and `BigInt` as an `int` property's native); a `number` is a float.
-- Rules are written with writers: TypeScript has no `FromFunction`, since a JavaScript function has no Python source.
-  `Contains` calls its condition with a variable named after its one parameter, read from the function's source, so
-  the condition is written with writers too: `(e) => e.phone.eq(p)`.
+- Constraints are written with writers: TypeScript has no `FromFunction`, since a JavaScript function has no Python
+  source. `Contains` calls its condition with a variable named after its one parameter, read from the function's source,
+  so the condition is written with writers too: `(e) => e.phone.eq(p)`.
 - `.symbols(...)` takes a record or a `Map`, and a predicate's `symbols` is a `Map`; a match is a record.
-- A validator's options are an object: `Validate(store, rules, { unknown: "ignore" })`.
+- A validator's options are an object: `Validate(store, constraints, { unknown: "ignore" })`.
 - Builders are made with `new`: `new Predicates.OfPredicate.Builder()`; the algebra's evaluator is
-  `new Predicates.Evaluator(store).run(rule, variables)`.
+  `new Predicates.Evaluator(store).run(constraint, variables)`.
 - A predicate is applied with `HasName.call(person, "alice")`, since an object is not callable; Python also calls it
   directly, `HasName(person, "alice")`. A builder gives a name it has not declared as `undefined`, where Python raises
   `AttributeError`.

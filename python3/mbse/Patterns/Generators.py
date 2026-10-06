@@ -1,12 +1,12 @@
 """Generators: data drawn from a predicate, new or already in a store.
 
-A predicate's rule says how its matches are distributed, by the terms of `Distributions` in it: weighted alternatives
-(`Choices`) and values drawn (`Normal`, ...). `Generate(store, predicate, random)` builds new matches, and
+A predicate's constraint says how its matches are distributed, by the terms of `Distributions` in it: weighted
+alternatives (`Choices`) and values drawn (`Normal`, ...). `Generate(store, predicate, random)` builds new matches, and
 `Sample(store, predicate, random)` draws the store's own, by weight.
 
 **Generating.** Each step draws from its own stream, `random.split(str(step))`, so a step's objects do not depend on how
-many were drawn before it, and one seed gives the same data in every implementation. A step walks the rule, through
-conjunctions and applications of predicates (their symbols and parameters bound to their arguments):
+many were drawn before it, and one seed gives the same data in every implementation. A step walks the constraint,
+through conjunctions and applications of predicates (their symbols and parameters bound to their arguments):
 
 - a `Choices` chooses an arm by weight, from the step's stream split by `"choices <n>"`, `n` counting the choices met,
   and the walk goes on into the arm's condition;
@@ -16,17 +16,17 @@ conjunctions and applications of predicates (their symbols and parameters bound 
 - an equality `x.p == v` (or `v == x.p`), where `x` is one of the predicate's symbols and `v` a literal or a drawn value,
   sets `x`'s property `p` to `v`, unless it is already set; nothing else sets a property.
 
-It then builds, for each symbol, an object of its schema with the properties set, and checks it: the rule must hold of
-the match, each arm chosen must hold, and, with `decreasing`, be the first of its choices to hold. If it does not, the
-step draws its values again, from its stream split by `"attempt 1"`, `"attempt 2"`, ..., keeping the arms chosen, up to
-`ATTEMPTS` attempts, and raises `ValueError` if none passes; a rule that draws nothing builds the same objects every
-time, and so has one attempt. `Generate` returns a `Generation`, which counts the steps it has taken and the attempts
-it rejected. The objects are transient until linked to the store's data; generated data is ordinary data, validated,
-queried and serialized as any other.
+It then builds, for each symbol, an object of its schema with the properties set, and checks it: the constraint must
+hold of the match, each arm chosen must hold, and, with `decreasing`, be the first of its choices to hold. If it does
+not, the step draws its values again, from its stream split by `"attempt 1"`, `"attempt 2"`, ..., keeping the arms
+chosen, up to `ATTEMPTS` attempts, and raises `ValueError` if none passes; a constraint that draws nothing builds the
+same objects every time, and so has one attempt. `Generate` returns a `Generation`, which counts the steps it has taken
+and the attempts it rejected. The objects are transient until linked to the store's data; generated data is ordinary
+data, validated, queried and serialized as any other.
 
 **Sampling.** `Sample` draws, with replacement, among the matches of the store's data (the cross product of the
 symbols' extents), each with probability proportional to what it weighs (`Predicates.Evaluator.weigh`): nothing unless
-the rule holds; then the product of the weights of the arms it falls under.
+the constraint holds; then the product of the weights of the arms it falls under.
 """
 
 from __future__ import annotations
@@ -118,7 +118,7 @@ class _Attempt:
                 self.visit(argument, scope)
         elif isinstance(node, Predicates.OfApply) and isinstance(node.predicate, Predicates.OfPredicate):
             arguments = [self._argument(argument, scope) for argument in node.arguments]
-            self.visit(node.predicate.rule, dict(zip(node.predicate.binds(), arguments)))
+            self.visit(node.predicate.requires, dict(zip(node.predicate.binds(), arguments)))
         elif isinstance(node, Distributions.Choices):
             index = Sampling.weighted(self.step.split(f"choices {self.met}"), [arm.weight for arm in node.arms])
             self.met += 1
@@ -173,7 +173,7 @@ class Generation(Iterator[dict[str, Any]]):
         predicate, step = self.predicate, self.random.split(str(self.steps))
         for count in range(ATTEMPTS):
             attempt = _Attempt(self, step, step.split(f"attempt {count}"))
-            attempt.visit(predicate.rule, {symbol: E.variable(symbol).data for symbol in predicate.symbols})
+            attempt.visit(predicate.requires, {symbol: E.variable(symbol).data for symbol in predicate.symbols})
             match = {symbol: _built(self.store, schema, attempt.values[symbol])
                      for symbol, schema in predicate.symbols.items()}
             if self._passes(attempt, match):
@@ -186,10 +186,10 @@ class Generation(Iterator[dict[str, Any]]):
         raise ValueError(f"the predicate cannot be generated: none of its {ATTEMPTS} attempts satisfies it")
 
     def _passes(self, attempt: _Attempt, match: Mapping[str, Any]) -> bool:
-        """Whether the rule holds of the match, each arm chosen holds, and, with `decreasing`, first."""
+        """Whether the constraint holds of the match, each arm chosen holds, and, with `decreasing`, first."""
         evaluate = Predicates.Evaluator(self.store)
         evaluate.observe = {}
-        if Predicates.holds(evaluate, self.predicate.rule, match) is not True:
+        if Predicates.holds(evaluate, self.predicate.requires, match) is not True:
             return False
         for key, (node, index) in attempt.chosen.items():
             held = evaluate.observe.get(key, [])
@@ -210,7 +210,7 @@ def _sample(store: Stores.Store, predicate: Predicates.OfPredicate, random: Stor
     names = list(predicate.symbols)
     matches = [dict(zip(names, objects)) for objects in itertools.product(
         *(evaluate.extent(schema.name) for schema in predicate.symbols.values()))]
-    weighed = [evaluate.weigh(predicate.rule, match) for match in matches]
+    weighed = [evaluate.weigh(predicate.requires, match) for match in matches]
     if not any(weighed):
         raise ValueError("no match of the store's data has a weight")
     while True:

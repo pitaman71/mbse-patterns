@@ -7,16 +7,16 @@
  * returns problems, the match labelled as mbse-schemas' `Validators` labels objects (the schema name and the position
  * in `Reachable.of` order):
  *
- * - `the=Contact#0: 'IsAnAdult' does not hold`, when a rule is false;
+ * - `the=Contact#0: 'IsAnAdult' does not hold`, when a constraint is false;
  * - `the=Contact#0: 'IsAnAdult' is unknown`, when it is unknown (a property it reads is absent), which `unknown`
  *   decides: `'report'` (the default) reports it so, `'ignore'` does not, and `'violation'` reports it as not holding;
  * - `the=Contact#0: 'IsAnAdult' raised TypeError: ...`, when evaluating it raises.
  *
- * A predicate without symbols is a statement about the whole store, with one match, labelled `the store`. Rules are
- * evaluated over the store (`Predicates.Evaluator`), whose extents are read once per check.
+ * A predicate without symbols is a statement about the whole store, with one match, labelled `the store`. Constraints
+ * are evaluated over the store (`Predicates.Evaluator`), whose extents are read once per check.
  *
  * Structure is mbse-schemas' `Validators.Validate(store)`'s to check: run both. The predicates are checked statically
- * (`Constraints.check`) when the validator is made, so that a rule that cannot be right is reported once, not per
+ * (`Constraints.check`) when the validator is made, so that a constraint that cannot be right is reported once, not per
  * match; a predicate with parameters is refused, since it holds only where it is applied to their values.
  */
 
@@ -54,11 +54,11 @@ export function Validate(store: Stores.Store, predicates: Iterable<Predicates.Of
     }
   }
 
-  const problem = (evaluate: Predicates.Evaluator, rule: unknown, scope: Record<string, unknown>): string | null => {
+  const problem = (evaluate: Predicates.Evaluator, constraint: unknown, scope: Record<string, unknown>): string | null => {
     let result: boolean | null;
     try {
-      result = Predicates.holds(evaluate, rule, scope);
-    } catch (error) { // a rule that raises is a problem of the data or the rule, reported in place
+      result = Predicates.holds(evaluate, constraint, scope);
+    } catch (error) { // a constraint that raises is a problem of the data or the constraint, reported in place
       return `raised ${(error as Error).name}: ${(error as Error).message}`;
     }
     if (result === null) return unknown === "ignore" ? null : unknown === "report" ? "is unknown" : "does not hold";
@@ -80,7 +80,7 @@ export function Validate(store: Stores.Store, predicates: Iterable<Predicates.Of
     for (const predicate of checked.predicates) {
       const symbols = [...predicate.symbols.keys()];
       for (const match of product([...predicate.symbols.values()].map((s) => pools.get(s.name as string) ?? []))) {
-        const found = problem(evaluate, predicate.rule, Object.fromEntries(symbols.map((symbol, i) => [symbol, (match[i] as [string, Visitable])[1]])));
+        const found = problem(evaluate, predicate.requires, Object.fromEntries(symbols.map((symbol, i) => [symbol, (match[i] as [string, Visitable])[1]])));
         if (found !== null) {
           const label = symbols.map((symbol, i) => `${symbol}=${(match[i] as [string, Visitable])[0]}`).join(", ") || "the store";
           problems.push(`${label}: ${repr(predicate.name)} ${found}`);

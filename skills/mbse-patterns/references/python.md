@@ -1,7 +1,7 @@
 # mbse-patterns in Python
 
 Install `mbse-patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions` and
-`Generators` from `mbse.Patterns`, the rules' writers
+`Generators` from `mbse.Patterns`, the expressions' writers
 from `mbse.Expressions` (and `Text.FromFunction` from `mbse.Expressions.Dialects.Python`), and the data's framework from
 `mbse.Schemas.Framework`.
 
@@ -33,7 +33,7 @@ store = Proxies.OfStore()
 for schema in (Directory, Contact, Phone, Listed, Phones):
     store.register(schema)
 
-# Predicates: named rules over symbols, built fluently. A condition may be read from a lambda, or written with
+# Predicates: named constraints over symbols, built fluently. A condition may be read from a lambda, or written with
 # writers; the symbols are written as variables of the same names.
 IsAnAdult = (Predicates.OfPredicate.Builder().name("IsAnAdult").description("18 or older")
              .symbols({"the": Contact}).requires(Text.FromFunction(lambda the: the.age >= 18)).create())
@@ -41,7 +41,7 @@ c, p = E.variable("c"), E.variable("p")
 owns = Predicates.Contains(c.phones, lambda e: e.phone == p)  # p is one of c's phones
 OwnedNumbered = (Predicates.OfPredicate.Builder().name("OwnedNumbered").symbols({"c": Contact, "p": Phone})
                  .requires(E.operation("implies", owns, p.has("number"))).create())
-rules = Constraints.check([IsAnAdult, OwnedNumbered])
+constraints = Constraints.check([IsAnAdult, OwnedNumbered])
 
 # The algebra: quantifiers over a schema's objects, built as predicates are. Mandatory, forbidden and possible links.
 HasAPhone = Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(owns))
@@ -60,21 +60,21 @@ store.Directory(store.singleton("book.Directory")).contacts(lambda x: x.contact(
     lambda x: x.contact(bob)).contacts(lambda x: x.contact(kid)).update()
 
 # Validation: every match among what the root reaches. Unknown is reported apart from false.
-validate = Validators.Validate(store, rules)
+validate = Validators.Validate(store, constraints)
 assert validate.Reachable(Directory, store.singleton("book.Directory")) == [
     "the=Contact#2: 'IsAnAdult' is unknown", "the=Contact#3: 'IsAnAdult' does not hold",
     "c=Contact#2, p=Phone#5: 'OwnedNumbered' does not hold"]
-assert validate(Contact, ann) == [] and Validators.Validate(store, rules, unknown="ignore")(Contact, bob) == []
+assert validate(Contact, ann) == [] and Validators.Validate(store, constraints, unknown="ignore")(Contact, bob) == []
 links = Validators.Validate(store, [EveryoneHasAPhone, Phoneless, Sometimes])
 assert links(Contact, ann) == ["the store: 'EveryoneHasAPhone' does not hold", "c=Contact#0: 'Phoneless' does not hold"]
 assert links(Contact, kid) == ["the store: 'EveryoneHasAPhone' does not hold"]  # the kid is phoneless, as allowed
 
 # Predicates are data: written by their symbols' schema names, read back through a store that resolves them.
-text = JSON.ToJSON(Constraints.Builders).Reachable(Constraints.OfSet.Schema, rules)
+text = JSON.ToJSON(Constraints.Builders).Reachable(Constraints.OfSet.Schema, constraints)
 copy = JSON.FromJSON(Constraints.OfStore(store)).Reachable(Constraints.OfSet.Schema, text)
 assert [p.name for p in copy.predicates] == ["IsAnAdult", "OwnedNumbered"] and copy.predicates[0].symbols["the"] is Contact
 
-# Queries: matches stream lazily, planned from the rule's shape.
+# Queries: matches stream lazily, planned from the constraint's shape.
 query = Queries.Scan(store)
 assert [m["the"] for m in query.select(IsAnAdult)] == [ann]
 numbered = (Predicates.OfPredicate.Builder().name("Numbered").symbols({"c": Contact, "p": Phone})
@@ -118,21 +118,22 @@ Queries.Scan(store).explain(predicate, variables=None)                     # the
 Queries.select(store, predicate, ...)                       # a queryable store's own select, or a scan
 Predicates.Exists(lambda q: q.symbols({"p": Phone}).requires(spec).forbids(spec))   # and Forall: the algebra
 Predicates.Contains(c.phones, lambda e: e.phone == p)       # Basic's any over entries(c, 'phones'); a hop for the planner
-Predicates.Evaluator(store)(rule, variables)                # evaluates the algebra over a store
+Predicates.Evaluator(store)(constraint, variables)                # evaluates the algebra over a store
 Distributions.Choices.Builder().arms(lambda a: a.weight(3).requires(*specs), ...).count(lambda c: c >= 1).decreasing().create()
 Distributions.Normal.Builder().symbol("age").mean(70).deviation(8).rounded().requires(lambda person, age: person.age == age).create()
 Distributions.Uniform.Builder().symbol(s).low(a).high(b); Poisson...rate(r); Geometric...probability(p)
 Distributions.Categorical.Builder().symbol(s).option(3, "x").option(1, "y")   # mixtures: choices of distributions
-Predicates.Evaluator(store).weigh(rule, match)              # the weight of the arms a match falls under, or 0.0
+Predicates.Evaluator(store).weigh(constraint, match)              # the weight of the arms a match falls under, or 0.0
 Generators.Sample(store, predicate, Stores.PCG32(seed))     # the store's matches, drawn by weight
 Generators.Generate(store, predicate, Stores.PCG32(seed))   # new matches: arms by weight, values drawn, equalities set
 ```
 
 ## Traps
 
-- `Text.FromFunction` reads the lambda's parameters as the rule's names: name them as the symbols. `Contains` reads its
-  condition the same way, with other names (`p`) from the closure, as writers: no calls inside it.
-- With several symbols, a rule without a relation between them matches every combination; say how they are related.
+- `Text.FromFunction` reads the lambda's parameters as the constraint's names: name them as the symbols. `Contains`
+  reads its condition the same way, with other names (`p`) from the closure, as writers: no calls inside it.
+- With several symbols, a constraint without a relation between them matches every combination; say how they are
+  related.
 - `Reachable` follows adjacencies both ways: from one contact it reaches its directory, and through it every other
   contact. Validate one object alone with `validate(schema, value)`.
 - A query's variables must not be named like its symbols, and an object variable is bound per match (it has no

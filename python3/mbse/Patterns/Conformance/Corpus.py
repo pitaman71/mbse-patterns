@@ -31,7 +31,8 @@ def build():
         schemas.register(schema)
     store = C.OfStore(schemas)
 
-    # --- predicates: one and two symbols, a description, a rule shared by two predicates, a hop through a relation ---
+    # --- predicates: one and two symbols, a description, a constraint shared by two predicates, a hop through a
+    # relation ---
     the, c, p = E.variable("the"), E.variable("c"), E.variable("p")
     adult = the.age.ge(18).data
     has_phone = E.operation("count", E.operation("entries", the, "phones")).ge(1).data

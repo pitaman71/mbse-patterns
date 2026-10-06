@@ -1,12 +1,12 @@
 # Guide for AI agents
 
-mbse-patterns works over the data of [mbse-schemas](https://github.com/pitaman71/mbse-schemas) with the rules of
-[mbse-expressions](https://github.com/pitaman71/mbse-expressions): predicates (named rules over symbols bound to a
+mbse-patterns works over the data of [mbse-schemas](https://github.com/pitaman71/mbse-schemas) with the expressions of
+[mbse-expressions](https://github.com/pitaman71/mbse-expressions): predicates (named constraints over symbols bound to a
 schema's objects and parameters, kept as data beside the schemas and used by reference), validators that check data
-against them, queries that find a store's matches for a predicate, lazily, planned from the rule's shape, patterns
-(predicates whose rules weigh alternatives and draw values from distributions), and samplers and generators that draw
-from them, byte-identically from a seed. Characterizers are planned. Two equivalent implementations exist: `python3/`
-and `typescript5/`.
+against them, queries that find a store's matches for a predicate, lazily, planned from the constraint's shape, patterns
+(predicates whose constraints weigh alternatives and draw values from distributions), and samplers and generators that
+draw from them, byte-identically from a seed. Characterizers are planned. Two equivalent implementations exist:
+`python3/` and `typescript5/`.
 
 ## Start here
 
@@ -14,11 +14,11 @@ and `typescript5/`.
 |---|---|
 | Know why the mbse repositories exist, and this one's part in them | [MBSE.md](MBSE.md) |
 | Use the library: write predicates, validate data, query a store | [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md), a skill. It loads its references only as needed |
-| Learn it by example, from a rule to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), seven case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
-| Understand a design rule, a planned release or an open question | [docs/PATTERNS.md](docs/PATTERNS.md), by section |
+| Learn it by example, from a constraint to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), seven case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
+| Understand a design decision, a planned release or an open question | [docs/PATTERNS.md](docs/PATTERNS.md), by section |
 | Change the package | this file, then [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md) |
 | Find or add a test case | [python3/tests/TestPlan.md](python3/tests/TestPlan.md) (TypeScript's plan lists only its differences) |
-| Write the rules themselves | [mbse-expressions' AGENTS.md](https://github.com/pitaman71/mbse-expressions/blob/main/AGENTS.md), in the sibling checkout |
+| Write the constraints themselves | [mbse-expressions' AGENTS.md](https://github.com/pitaman71/mbse-expressions/blob/main/AGENTS.md), in the sibling checkout |
 | Model the data | [mbse-schemas' AGENTS.md](https://github.com/pitaman71/mbse-schemas/blob/main/AGENTS.md), in the sibling checkout |
 
 ## Invariants when changing code
@@ -26,7 +26,9 @@ and `typescript5/`.
 - **One vocabulary across the mbse repositories.** A kind's or schema's named members are *properties*, never
   "fields" (a field is only the host language's class member that holds one). An element of an expression tree is
   a *term* (mbse-expressions), and of a program tree a *syntax node* (mbse-programs); never a bare "node" in code,
-  docs or messages.
+  docs or messages. What a specification requires is a *constraint*, never a "rule"; a constraint is checked,
+  resolved or generated from, never executed ([MBSE.md, What a specification is made
+  of](MBSE.md#what-a-specification-is-made-of)).
 - **The README opens with why.** Its first sentence or paragraph says, TL;DR style, why this repository exists, in
   the terms of `MBSE.md`; what it is comes after. Keep that opening true as the repository changes.
 - **Every human-facing document has navigation.** A `{previous, home, next}` line heads and ends each document in
@@ -73,5 +75,5 @@ npm run conformance
 
 - [mbse-schemas](https://github.com/pitaman71/mbse-schemas): the data, its stores and their extents. A sibling
   checkout, `../mbse-schemas`, pinned by version and commit in `siblings.json` (see `scripts/siblings.py`).
-- [mbse-expressions](https://github.com/pitaman71/mbse-expressions): the rules, Basic's evaluator and partial
+- [mbse-expressions](https://github.com/pitaman71/mbse-expressions): the expressions, Basic's evaluator and partial
   evaluator. A sibling checkout, `../mbse-expressions`, pinned in `siblings.json`.

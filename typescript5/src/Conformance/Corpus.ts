@@ -33,7 +33,8 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
   for (const schema of [Contact, Phone, Phones]) schemas.register(schema);
   const store = new C.OfStore(schemas);
 
-  // --- predicates: one and two symbols, a description, a rule shared by two predicates, a hop through a relation ---
+  // --- predicates: one and two symbols, a description, a constraint shared by two predicates, a hop through a relation
+  // ---
   const [the, c, p] = [E.variable("the"), E.variable("c"), E.variable("p")];
   const adult = the.age.ge(18n).data;
   const hasPhone = E.operation("count", E.operation("entries", the, "phones")).ge(1n).data;

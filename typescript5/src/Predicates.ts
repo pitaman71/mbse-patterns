@@ -1,9 +1,9 @@
 /**
- * Predicates: named rules over a store's objects, and the predicate algebra they are written in.
+ * Predicates: named constraints over a store's objects, and the predicate algebra they are written in.
  *
- * A predicate is a rule over symbols, each bound to an object of a schema, and parameters, each a value; it applies to
- * a *match*, a binding of every symbol to an object of its schema. It is built as schemas are, by a fluent builder
- * finalized by `create()`, `clone()` or `update()`, none of which validates:
+ * A predicate is a named constraint over symbols, each bound to an object of a schema, and parameters, each a value; it
+ * applies to a *match*, a binding of every symbol to an object of its schema. It is built as schemas are, by a fluent
+ * builder finalized by `create()`, `clone()` or `update()`, none of which validates:
  *
  *     const APerson = { person: Person };
  *     const HasName = new Predicates.OfPredicate.Builder()
@@ -15,16 +15,16 @@
  *
  * `.parameters(...)` takes property specs, as an object schema's `.properties(...)` does, each with a name and,
  * optionally, a type. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold;
- * the rule is their conjunction. A condition is any spec of the algebra: a term, or a writer. Its free names are the
- * symbols and parameters. A builder gives the variables it declares by name, so `pred.person` is the variable `person`
- * once `pred.symbols(APerson)` declares it. A predicate without symbols is a statement about the whole store; one
- * without a name is written inline, where it is used.
+ * its `requires` is their conjunction. A condition is any spec of the algebra: a term, or a writer. Its free names are
+ * the symbols and parameters. A builder gives the variables it declares by name, so `pred.person` is the variable
+ * `person` once `pred.symbols(APerson)` declares it. A predicate without symbols is a statement about the whole store;
+ * one without a name is written inline, where it is used.
  *
  * A predicate is a term of the algebra, `DIALECT`, which extends mbse-expressions' Basic: it binds its symbols and
- * parameters within its rule (an import, in mbse-expressions' terms). Applying it, `HasName.call(pred.person, "alice")`,
- * is a term too, `OfApply`, which holds the predicate itself, by reference, and arguments for its symbols and then its
- * parameters, in order: it holds when the predicate's rule holds with them bound. A predicate used in several places is
- * one object, and is written once.
+ * parameters within `requires` (an import, in mbse-expressions' terms). Applying it, `HasName.call(pred.person,
+ * "alice")`, is a term too, `OfApply`, which holds the predicate itself, by reference, and arguments for its symbols
+ * and then its parameters, in order: it holds when the predicate's `requires` holds with them bound. A predicate used
+ * in several places is one object, and is written once.
  *
  * The algebra's other terms, each a data class with a builder, are built as a predicate is, from a spec (data, or a
  * callable taking the builder):
@@ -83,11 +83,11 @@ function schemaName(schema: unknown): string {
 
 /** The conditions' conjunction, left to right; null if there are none. */
 function conjunction(conditions: unknown[]): Terms.Term | null {
-  let rule: Terms.Term | null = null;
+  let constraint: Terms.Term | null = null;
   for (const condition of conditions) {
-    rule = rule === null ? condition as Terms.Term : E.operation("and", rule as E.OfAny.Spec, condition as E.OfAny.Spec).data;
+    constraint = constraint === null ? condition as Terms.Term : E.operation("and", constraint as E.OfAny.Spec, condition as E.OfAny.Spec).data;
   }
-  return rule;
+  return constraint;
 }
 
 function negation(spec: unknown): Terms.Term {
@@ -189,26 +189,26 @@ export class OfExists extends Quantified {
   declare static Builder: typeof ExistsBuilder;
 }
 
-/** A rule over symbols and parameters, which it binds within the rule. `predicate.call(...arguments)` applies it: see
- * `OfApply`. */
+/** A constraint over symbols and parameters, which it binds within the constraint it `requires`.
+ * `predicate.call(...arguments)` applies it: see `OfApply`. */
 export class OfPredicate extends Terms.Term {
   static override KIND = "predicate";
   static override ROLE = Terms.IMPORT;
   static override PROPERTIES = new Map<string, unknown>([["name", String], ["description", String]]);
   static override OPTIONAL = new Set(["name", "description"]);
   static override VALUES = new Map([["symbols", SYMBOLS], ["parameters", PARAMETERS]]);
-  static override SLOTS = ["rule"];
+  static override SLOTS = ["requires"];
   /** Builds this kind. */
   declare static Builder: typeof PredicateBuilder;
   declare name: string | null;
   declare description: string | null;
-  declare rule: any;
+  declare requires: any;
   declare symbols: Symbols; // symbol -> schema
   declare parameters: Symbols; // parameter -> type, or null
 
-  constructor(name: unknown = null, description: unknown = null, rule: unknown = null, symbols: unknown = null,
+  constructor(name: unknown = null, description: unknown = null, requires: unknown = null, symbols: unknown = null,
     parameters: unknown = null) {
-    super(name, description, rule, symbols ?? new Symbols(), parameters ?? new Symbols());
+    super(name, description, requires, symbols ?? new Symbols(), parameters ?? new Symbols());
   }
 
   override binds(): string[] {
@@ -231,7 +231,8 @@ export class OfPredicate extends Terms.Term {
   }
 }
 
-/** A predicate applied to arguments, for its symbols and then its parameters: whether its rule holds with them bound. */
+/** A predicate applied to arguments, for its symbols and then its parameters: whether its `requires` holds with them
+ * bound. */
 export class OfApply extends Terms.Term {
   static override KIND = "apply";
   static override ROLE = Terms.APPLICATION;
@@ -360,8 +361,8 @@ class ExtentBuilder extends Terms.Builder {
 }
 
 /** Builds a predicate. DSL: `.name(str)`, `.description(str)`, `.symbols({name: schema})` and `.parameters(...specs)`,
- * each added to those already given, in order, and `.requires(spec)` and `.forbids(spec)`, which add conditions to the
- * rule. The builder gives its symbols and parameters as variables. */
+ * each added to those already given, in order, and `.requires(spec)` and `.forbids(spec)`, which add conditions to
+ * `requires`. The builder gives its symbols and parameters as variables. */
 class PredicateBuilder extends Terms.Builder implements Declaring {
   static override DATA = OfPredicate;
   [variable: string]: any;
@@ -422,25 +423,25 @@ class PredicateBuilder extends Terms.Builder implements Declaring {
     return made;
   }
 
-  private rule(): void {
+  private writeRequires(): void {
     if (this.conditions.length === 0) return;
     const existing = (this.state.entries.get("arguments") ?? [])[0]?.links.get("argument");
-    this.argument("rule", conjunction([...(existing === undefined ? [] : [existing]), ...this.conditions]));
+    this.argument("requires", conjunction([...(existing === undefined ? [] : [existing]), ...this.conditions]));
     this.conditions = [];
   }
 
   override create(): OfPredicate {
-    this.rule();
+    this.writeRequires();
     return this.fold(super.create());
   }
 
   override clone(): OfPredicate {
-    this.rule();
+    this.writeRequires();
     return this.fold(super.clone());
   }
 
   override update(): OfPredicate {
-    this.rule();
+    this.writeRequires();
     return this.fold(super.update());
   }
 }
@@ -550,7 +551,7 @@ function inSupport(drawn: Distributions.Drawn, value: unknown, parameter: (name:
 }
 
 function truth(value: unknown): boolean | null {
-  if (value !== null && typeof value !== "boolean") throw new TypeError(`a predicate must be a bool, got ${typeName(value)}`);
+  if (value !== null && typeof value !== "boolean") throw new TypeError(`a constraint must be a bool, got ${typeName(value)}`);
   return value as boolean | null;
 }
 
@@ -605,7 +606,7 @@ export class Evaluator {
   private apply(thunks: Thunk[], node: OfApply): unknown {
     const predicate = node.predicate as OfPredicate;
     const values = thunks.slice(1).map((thunk) => thunk());
-    return this.interpreter.run(predicate.rule, Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]])));
+    return this.interpreter.run(predicate.requires, Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]])));
   }
 
   /** Whether each of a choices' arms holds, in order. */
@@ -625,12 +626,12 @@ export class Evaluator {
     return found.size === 1 ? [...found][0] as boolean | null : null;
   }
 
-  /** What a match weighs under a rule: 0 unless the rule holds; then the product, over the choices on its conjuncts, of
-   * the weight of the arm the match falls under (the first that holds, with `decreasing`) or the sum of those of the
-   * arms that hold, each times what the match weighs under the arm's condition. */
-  weigh(rule: unknown, scope: Record<string, unknown>): number {
+  /** What a match weighs under a constraint: 0 unless the constraint holds; then the product, over the choices on its
+   * conjuncts, of the weight of the arm the match falls under (the first that holds, with `decreasing`) or the sum of
+   * those of the arms that hold, each times what the match weighs under the arm's condition. */
+  weigh(constraint: unknown, scope: Record<string, unknown>): number {
     const variables = new Symbolics.Variables(scope);
-    const resolved = DIALECT.resolve(rule);
+    const resolved = DIALECT.resolve(constraint);
     return this.interpreter.evaluate(resolved, variables, new Set()) === true ? this.weighed(resolved, variables) : 0;
   }
 
@@ -641,7 +642,7 @@ export class Evaluator {
     if (node instanceof OfApply) {
       const values = node.arguments.map((argument) => this.interpreter.evaluate(argument, scope, new Set()));
       const predicate = node.predicate as OfPredicate;
-      return this.weighed(predicate.rule, new Symbolics.Variables(Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]]))));
+      return this.weighed(predicate.requires, new Symbolics.Variables(Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]]))));
     }
     if (node instanceof Distributions.Choices) {
       const held = this.held(node, scope);
@@ -653,9 +654,10 @@ export class Evaluator {
   }
 }
 
-/** The rule's value with `scope` bound: `true`, `false` or unknown (`null`); a rule that gives anything else throws. */
-export function holds(evaluate: Evaluator, rule: unknown, scope: Record<string, unknown>): boolean | null {
-  const result = evaluate.interpreter.run(rule, scope);
-  if (result !== null && typeof result !== "boolean") throw new TypeError(`a predicate must be a bool, got ${typeName(result)}`);
+/** The constraint's value with `scope` bound: `true`, `false` or unknown (`null`); a constraint that gives anything
+ * else throws. */
+export function holds(evaluate: Evaluator, constraint: unknown, scope: Record<string, unknown>): boolean | null {
+  const result = evaluate.interpreter.run(constraint, scope);
+  if (result !== null && typeof result !== "boolean") throw new TypeError(`a constraint must be a bool, got ${typeName(result)}`);
   return result as boolean | null;
 }

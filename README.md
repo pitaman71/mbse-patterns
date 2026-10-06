@@ -3,17 +3,17 @@
 
 # mbse-patterns
 
-`mbse-patterns` makes a specification's rules about populations of data executable: which combinations of objects
-are valid, which must or mustn't be linked, and what realistic data looks like. One predicate checks implementations'
-data, finds it, and generates test data, so the specification is also the test oracle and the fixture, instead of rules
-copied into validation code, queries and test fixtures. It is part of the mbse repositories'
-[executable specifications](MBSE.md).
+`mbse-patterns` makes a specification's constraints about populations of data checkable, and generates data within
+them: which combinations of objects are valid, which must or mustn't be linked, and what realistic data looks like. One
+predicate checks implementations' data, finds it, and generates test data, so the specification is also the test oracle
+and the fixture, instead of constraints copied into validation code, queries and test fixtures. It is part of the mbse
+repositories' [executable specifications](MBSE.md).
 
-Predicates and queries over [mbse-schemas](https://github.com/pitaman71/mbse-schemas) data, written with the rules of
-[mbse-expressions](https://github.com/pitaman71/mbse-expressions). A predicate, such as "a contact is an adult" or "a
-contact's phone has a number", is a named rule over symbols, each bound to an object of a schema, kept as data beside
-the schemas: stored, sent and validated like any other data. Validators check data against predicates; queries find a
-store's matches for a predicate, streaming them lazily, planned from the rule's shape.
+Predicates and queries over [mbse-schemas](https://github.com/pitaman71/mbse-schemas) data, written with the expressions
+of [mbse-expressions](https://github.com/pitaman71/mbse-expressions). A predicate, such as "a contact is an adult" or "a
+contact's phone has a number", is a named constraint over symbols, each bound to an object of a schema, kept as data
+beside the schemas: stored, sent and validated like any other data. Validators check data against predicates; queries
+find a store's matches for a predicate, streaming them lazily, planned from the constraint's shape.
 
 ```python
 from mbse.Expressions import Expressions as E
@@ -62,14 +62,14 @@ Validators.Validate(store, [IsAnAdult, HasAPhone]).Reachable(Contact, ann);
 Queries.select(store, IsAnAdult);
 ```
 
-A pattern is a predicate whose rule weighs alternatives (`Distributions.Choices`) and draws values from distributions
-(uniform, normal, Poisson, geometric, categorical); a sampler draws a store's matches by weight, and a generator builds
-new data, redrawing until the predicate holds, byte-identical in both languages from a seed. Characterizers that fit distributions to data are designed
-([the design](docs/PATTERNS.md)) for the next release.
+A pattern is a predicate whose constraint weighs alternatives (`Distributions.Choices`) and draws values from
+distributions (uniform, normal, Poisson, geometric, categorical); a sampler draws a store's matches by weight, and a
+generator builds new data, redrawing until the predicate holds, byte-identical in both languages from a seed.
+Characterizers that fit distributions to data are designed ([the design](docs/PATTERNS.md)) for the next release.
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
-(`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a rule from a
-lambda (`Text.FromFunction`), as `Contains` reads its condition; TypeScript writes rules with mbse-expressions'
+(`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a constraint from
+a lambda (`Text.FromFunction`), as `Contains` reads its condition; TypeScript writes constraints with mbse-expressions'
 writers, and calls `Contains`'s condition with a variable.
 
 ## Getting started
@@ -102,8 +102,8 @@ npm run coverage
 
 ## Documentation
 
-- Tutorials, seven case studies that build from a rule to generated test data: [Python](python3/tutorials/README.md)
-  and [TypeScript](typescript5/tutorials/README.md)
+- Tutorials, seven case studies that build from a constraint to generated test data:
+  [Python](python3/tutorials/README.md) and [TypeScript](typescript5/tutorials/README.md)
 - [Patterns design](docs/PATTERNS.md): the design, the planned releases and the open questions
 - [Agent skill](skills/mbse-patterns/SKILL.md): a skill for AI agents using the package
 - [Guide for AI agents](AGENTS.md): for agents changing it; [Equivalence](docs/EQUIVALENCE.md): the two implementations

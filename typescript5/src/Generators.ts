@@ -1,13 +1,14 @@
 /**
  * Generators: data drawn from a predicate, new or already in a store.
  *
- * A predicate's rule says how its matches are distributed, by the terms of `Distributions` in it: weighted
+ * A predicate's constraint says how its matches are distributed, by the terms of `Distributions` in it: weighted
  * alternatives (`Choices`) and values drawn (`Normal`, ...). `Generate(store, predicate, random)` builds new matches,
  * and `Sample(store, predicate, random)` draws the store's own, by weight.
  *
  * **Generating.** Each step draws from its own stream, `random.split(String(step))`, so a step's objects do not depend
- * on how many were drawn before it, and one seed gives the same data in every implementation. A step walks the rule,
- * through conjunctions and applications of predicates (their symbols and parameters bound to their arguments):
+ * on how many were drawn before it, and one seed gives the same data in every implementation. A step walks the
+ * constraint, through conjunctions and applications of predicates (their symbols and parameters bound to their
+ * arguments):
  *
  * - a `Choices` chooses an arm by weight, from the step's stream split by `"choices <n>"`, `n` counting the choices
  *   met, and the walk goes on into the arm's condition;
@@ -17,17 +18,17 @@
  * - an equality `x.p == v` (or `v == x.p`), where `x` is one of the predicate's symbols and `v` a literal or a drawn
  *   value, sets `x`'s property `p` to `v`, unless it is already set; nothing else sets a property.
  *
- * It then builds, for each symbol, an object of its schema with the properties set, and checks it: the rule must hold
- * of the match, each arm chosen must hold, and, with `decreasing`, be the first of its choices to hold. If it does not,
- * the step draws its values again, from its stream split by `"attempt 1"`, `"attempt 2"`, ..., keeping the arms chosen,
- * up to `ATTEMPTS` attempts, and throws `ValueError` if none passes; a rule that draws nothing builds the same objects
- * every time, and so has one attempt. `Generate` returns a `Generation`, which counts the steps it has taken and the
- * attempts it rejected. The objects are transient until linked to the store's data; generated data is ordinary data,
- * validated, queried and serialized as any other.
+ * It then builds, for each symbol, an object of its schema with the properties set, and checks it: the constraint must
+ * hold of the match, each arm chosen must hold, and, with `decreasing`, be the first of its choices to hold. If it does
+ * not, the step draws its values again, from its stream split by `"attempt 1"`, `"attempt 2"`, ..., keeping the arms
+ * chosen, up to `ATTEMPTS` attempts, and throws `ValueError` if none passes; a constraint that draws nothing builds the
+ * same objects every time, and so has one attempt. `Generate` returns a `Generation`, which counts the steps it has
+ * taken and the attempts it rejected. The objects are transient until linked to the store's data; generated data is
+ * ordinary data, validated, queried and serialized as any other.
  *
  * **Sampling.** `Sample` draws, with replacement, among the matches of the store's data (the cross product of the
  * symbols' extents), each with probability proportional to what it weighs (`Predicates.Evaluator.weigh`): nothing
- * unless the rule holds; then the product of the weights of the arms it falls under.
+ * unless the constraint holds; then the product of the weights of the arms it falls under.
  */
 
 import { Domains as BasicDomains, Expressions as E } from "@mbse/expressions";
@@ -118,7 +119,7 @@ class Attempt {
       for (const argument of node.arguments) this.visit(argument, scope);
     } else if (node instanceof Predicates.OfApply && node.predicate instanceof Predicates.OfPredicate) {
       const args = node.arguments.map((argument) => this.argument(argument, scope));
-      this.visit(node.predicate.rule, new Map(node.predicate.binds().map((name, i) => [name, args[i]])));
+      this.visit(node.predicate.requires, new Map(node.predicate.binds().map((name, i) => [name, args[i]])));
     } else if (node instanceof Distributions.Choices) {
       const index = Sampling.weighted(this.step.split(`choices ${this.met}`), node.arms.map((arm) => arm.weight as number));
       this.met += 1;
@@ -182,7 +183,7 @@ export class Generation implements IterableIterator<Match> {
     const step = this.random.split(String(this.steps));
     for (let count = 0; count < ATTEMPTS; count++) {
       const attempt = new Attempt(this, step, step.split(`attempt ${count}`));
-      attempt.visit(predicate.rule, new Map([...predicate.symbols.keys()].map((symbol) => [symbol, E.variable(symbol).data])));
+      attempt.visit(predicate.requires, new Map([...predicate.symbols.keys()].map((symbol) => [symbol, E.variable(symbol).data])));
       const match: Match = Object.fromEntries([...predicate.symbols].map(([symbol, schema]) =>
         [symbol, built(this.store, schema, attempt.values.get(symbol) as Map<string, unknown>)]));
       if (this.passes(attempt, match)) {
@@ -198,11 +199,11 @@ export class Generation implements IterableIterator<Match> {
     throw new Errors.ValueError(`the predicate cannot be generated: none of its ${ATTEMPTS} attempts satisfies it`);
   }
 
-  /** Whether the rule holds of the match, each arm chosen holds, and, with `decreasing`, first. */
+  /** Whether the constraint holds of the match, each arm chosen holds, and, with `decreasing`, first. */
   private passes(attempt: Attempt, match: Match): boolean {
     const evaluate = new Predicates.Evaluator(this.store);
     evaluate.observe = new Map();
-    if (Predicates.holds(evaluate, this.predicate.rule, match) !== true) return false;
+    if (Predicates.holds(evaluate, this.predicate.requires, match) !== true) return false;
     for (const [node, index] of attempt.chosen) {
       const held = evaluate.observe.get(node) as (boolean | null)[]; // every choices met holds, so was evaluated
       if (held[index] !== true || (node.decreasing && held.slice(0, index).includes(true))) return false;
@@ -231,7 +232,7 @@ function* sample(store: Stores.Store, predicate: Predicates.OfPredicate, random:
   const names = [...predicate.symbols.keys()];
   const matches = [...product([...predicate.symbols.values()].map((schema) => evaluate.extent(schema.name as string)))]
     .map((objects) => Object.fromEntries(names.map((name, i) => [name, objects[i] as Visitable])));
-  const weighed = matches.map((match) => evaluate.weigh(predicate.rule, match));
+  const weighed = matches.map((match) => evaluate.weigh(predicate.requires, match));
   if (!weighed.some((w) => w > 0)) throw new Errors.ValueError("no match of the store's data has a weight");
   for (;;) yield matches[Sampling.weighted(random, weighed)] as Match;
 }

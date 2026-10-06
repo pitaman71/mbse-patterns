@@ -1,7 +1,7 @@
 """Distributions: terms of the predicate algebra that weigh alternatives and draw values.
 
-A pattern is a predicate: its rule says what holds of a match, and these terms, in its rule, say how matches are
-distributed, so that one predicate is validated, queried, sampled from and generated from alike.
+A pattern is a predicate: its constraint says what holds of a match, and these terms, in its constraint, say how matches
+are distributed, so that one predicate is validated, queried, sampled from and generated from alike.
 
     APerson = {"person": Person}
     People = (
@@ -60,10 +60,10 @@ def _positive(kind: str, weight: Any) -> list[str]:
 
 
 def _conjunction(conditions: list[Any]) -> Any:
-    rule = None
+    constraint = None
     for condition in conditions:
-        rule = condition if rule is None else E.operation("and", rule, condition).data
-    return rule
+        constraint = condition if constraint is None else E.operation("and", constraint, condition).data
+    return constraint
 
 
 def _existing(builder: Terms.Builder, index: int) -> Any:
@@ -502,5 +502,5 @@ def typing(predicate: Any) -> list[str]:
         for argument in node._arguments() if isinstance(node, Terms.Term) else ():
             visit(argument)
 
-    visit(predicate.rule)
+    visit(predicate.requires)
     return problems

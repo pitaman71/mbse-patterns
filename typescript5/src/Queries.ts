@@ -3,19 +3,19 @@
  *
  * `QueryableStore` is the protocol: an mbse-schemas store (`Stores.Store`) that also answers
  * `select(predicate, variables = null, unknown = false)`, an iterator over the predicate's matches among the store's
- * data for which its rule holds. A match maps each symbol to an object of the symbol's schema, from the schema's extent
- * (what the store's singletons reach: objects the program built but never linked to the store's data are not found); a
- * predicate without symbols has one match, empty, when it holds.
- * `variables` binds the rule's other names; `unknown` also yields the matches for which the rule is unknown. The
- * predicate is checked when `select` is called, which throws for one that cannot be a query; the extents are read only
- * as matches are asked for.
+ * data for which its constraint holds. A match maps each symbol to an object of the symbol's schema, from the schema's
+ * extent (what the store's singletons reach: objects the program built but never linked to the store's data are not
+ * found); a predicate without symbols has one match, empty, when it holds.
+ * `variables` binds the constraint's other names; `unknown` also yields the matches for which the constraint is
+ * unknown. The predicate is checked when `select` is called, which throws for one that cannot be a query; the extents
+ * are read only as matches are asked for.
  *
- * The matches are the cross product of the symbols' extents, filtered by the rule; how they are found is the
- * implementation's to choose from the rule's shape. `Scan(store)` makes any store queryable, in memory, delegating
- * every `Stores.Store` method to it, and plans each query:
+ * The matches are the cross product of the symbols' extents, filtered by the constraint; how they are found is the
+ * implementation's to choose from the constraint's shape. `Scan(store)` makes any store queryable, in memory,
+ * delegating every `Stores.Store` method to it, and plans each query:
  *
- * - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match that fails
- *   one is never extended; those that read no symbol, only variables, are tested once, first.
+ * - The constraint's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match
+ *   that fails one is never extended; those that read no symbol, only variables, are tested once, first.
  * - A conjunct `any(e in entries(a, 'adjacency'), e.link == b)`, as `Predicates.Contains(a.adjacency, (e) =>
  *   e.link.eq(b))` writes it, relates two symbols through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
  *   relation's `unique` clauses makes `a`'s end determine the entry, there is at most one, and the hop is taken first.
@@ -35,7 +35,7 @@ import type { Visitable } from "@mbse/schemas/Framework/Visitors";
 import type * as Constraints from "./Constraints.js";
 import * as Predicates from "./Predicates.js";
 
-/** Values for a rule's names other than the symbols. */
+/** Values for a constraint's names other than the symbols. */
 export type Variables = Record<string, unknown>;
 
 /** A match: each symbol's object. */
@@ -43,16 +43,16 @@ export type Match = Record<string, Visitable>;
 
 /** A store that answers queries. */
 export interface QueryableStore extends Stores.Store {
-  /** The predicate's matches for which its rule holds (or is unknown, with `unknown`), as they are read. */
+  /** The predicate's matches for which its constraint holds (or is unknown, with `unknown`), as they are read. */
   select(predicate: Predicates.OfPredicate, variables?: Variables | null, unknown?: boolean): IterableIterator<Match>;
 }
 
-/** The rule's top-level conjuncts: the arguments of nested `and`s, or the rule itself. */
-function conjuncts(rule: unknown): unknown[] {
-  if (rule instanceof E.OfOperation.Data && rule.name === "and" && rule.arguments.length === 2) {
-    return [...conjuncts(rule.arguments[0]), ...conjuncts(rule.arguments[1])];
+/** The constraint's top-level conjuncts: the arguments of nested `and`s, or the constraint itself. */
+function conjuncts(constraint: unknown): unknown[] {
+  if (constraint instanceof E.OfOperation.Data && constraint.name === "and" && constraint.arguments.length === 2) {
+    return [...conjuncts(constraint.arguments[0]), ...conjuncts(constraint.arguments[1])];
   }
-  return [rule];
+  return [constraint];
 }
 
 function variable(node: unknown, names: { has(name: string): boolean }): string | null {
@@ -106,7 +106,7 @@ function hopOf(conjunct: unknown, schemas: ReadonlyMap<string, Schemas.OfObject.
 /** How a query finds its matches: an order of the symbols, each scanned or reached by a hop, and the conjuncts tested
  * once their symbols are bound. */
 class Plan {
-  readonly rule: unknown;
+  readonly constraint: unknown;
   readonly symbols: ReadonlyMap<string, Schemas.OfObject.Data>;
   readonly variables: Variables;
   readonly order: [string, Hop | null][] = [];
@@ -124,13 +124,13 @@ class Plan {
     for (const name of Object.keys(variables)) {
       if (symbols.has(name)) throw new Errors.ValueError(`${repr(name)} is a symbol; it is not a variable`);
     }
-    const rule = Predicates.DIALECT.resolve(predicate.rule);
-    const problems = Predicates.DIALECT.validate(rule, { bound: [...symbols.keys(), ...Object.keys(variables)], core: true });
+    const constraint = Predicates.DIALECT.resolve(predicate.requires);
+    const problems = Predicates.DIALECT.validate(constraint, { bound: [...symbols.keys(), ...Object.keys(variables)], core: true });
     if (problems.length > 0) throw new Errors.ValueError(`the predicate cannot be a query: ${problems.join("; ")}`);
     this.symbols = symbols;
     this.variables = { ...variables };
-    this.rule = rule;
-    const parts = conjuncts(this.rule).map((c) => [c, [...Symbolics.free(c)].filter((name) => symbols.has(name))] as const);
+    this.constraint = constraint;
+    const parts = conjuncts(this.constraint).map((c) => [c, [...Symbolics.free(c)].filter((name) => symbols.has(name))] as const);
     const hops = parts.map(([c]) => hopOf(c, symbols)).filter((hop): hop is Hop => hop !== null);
     const names = [...symbols.keys()];
     const bound = new Set<string>();
@@ -186,7 +186,7 @@ class Plan {
   private *extend(depth: number, scope: Record<string, unknown>, evaluate: Predicates.Evaluator,
     unknown: boolean): Generator<Match> {
     if (depth === this.order.length) {
-      const result = Predicates.holds(evaluate, this.rule, scope);
+      const result = Predicates.holds(evaluate, this.constraint, scope);
       if (result === true || (unknown && result === null)) {
         yield Object.fromEntries([...this.symbols.keys()].map((symbol) => [symbol, scope[symbol] as Visitable]));
       }
@@ -202,7 +202,7 @@ class Plan {
   }
 }
 
-/** A queryable store over any store, answering queries by the plan the predicate's rule allows. */
+/** A queryable store over any store, answering queries by the plan the predicate's constraint allows. */
 export class Scan implements QueryableStore {
   constructor(readonly store: Stores.Store) {}
 

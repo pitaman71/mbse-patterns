@@ -2,18 +2,19 @@
 
 `QueryableStore` is the protocol: an mbse-schemas store (`Stores.Store`) that also answers
 `select(predicate, variables=None, unknown=False)`, an iterator over the predicate's matches among the store's data for
-which its rule holds. A match maps each symbol to an object of the symbol's schema, from the schema's extent (what the
-store's singletons reach: objects the program built but never linked to the store's data are not found); a predicate
+which its constraint holds. A match maps each symbol to an object of the symbol's schema, from the schema's extent (what
+the store's singletons reach: objects the program built but never linked to the store's data are not found); a predicate
 without symbols has one match, empty, when it holds. `variables`
-binds the rule's other names; `unknown` also yields the matches for which the rule is unknown. The predicate is checked
-when `select` is called, which raises for one that cannot be a query; the extents are read only as matches are asked for.
+binds the constraint's other names; `unknown` also yields the matches for which the constraint is unknown. The predicate
+is checked when `select` is called, which raises for one that cannot be a query; the extents are read only as matches
+are asked for.
 
-The matches are the cross product of the symbols' extents, filtered by the rule; how they are found is the
-implementation's to choose from the rule's shape. `Scan(store)` makes any store queryable, in memory, delegating every
-`Stores.Store` method to it, and plans each query:
+The matches are the cross product of the symbols' extents, filtered by the constraint; how they are found is the
+implementation's to choose from the constraint's shape. `Scan(store)` makes any store queryable, in memory, delegating
+every `Stores.Store` method to it, and plans each query:
 
-- The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match that fails
-  one is never extended; those that read no symbol, only variables, are tested once, first.
+- The constraint's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a match
+  that fails one is never extended; those that read no symbol, only variables, are tested once, first.
 - A conjunct `any(e in entries(a, 'adjacency'), e.link == b)`, as `Predicates.Contains(a.adjacency, lambda e: e.link
   == b)` writes it, relates two symbols through a relation: `b`'s candidates are then the targets of `a`'s entries, not `b`'s whole extent. When one of the
   relation's `unique` clauses makes `a`'s end determine the entry, there is at most one, and the hop is taken first.
@@ -45,15 +46,15 @@ class QueryableStore(Stores.Store, Protocol):
 
     def select(self, predicate: Any, variables: Mapping[str, Any] | None = None, unknown: bool = False
                ) -> Iterator[Match]:
-        """The predicate's matches for which its rule holds (or is unknown, with `unknown`), as they are read."""
+        """The predicate's matches for which its constraint holds (or is unknown, with `unknown`), as they are read."""
         ...
 
 
-def _conjuncts(rule: Any) -> list[Any]:
-    """The rule's top-level conjuncts: the arguments of nested `and`s, or the rule itself."""
-    if isinstance(rule, E.OfOperation.Data) and rule.name == "and" and len(rule.arguments) == 2:
-        return [*_conjuncts(rule.arguments[0]), *_conjuncts(rule.arguments[1])]
-    return [rule]
+def _conjuncts(constraint: Any) -> list[Any]:
+    """The constraint's top-level conjuncts: the arguments of nested `and`s, or the constraint itself."""
+    if isinstance(constraint, E.OfOperation.Data) and constraint.name == "and" and len(constraint.arguments) == 2:
+        return [*_conjuncts(constraint.arguments[0]), *_conjuncts(constraint.arguments[1])]
+    return [constraint]
 
 
 def _variable(node: Any, names: Any) -> str | None:
@@ -116,12 +117,12 @@ class _Plan:
         for name in variables:
             if name in symbols:
                 raise ValueError(f"{name!r} is a symbol; it is not a variable")
-        rule = Predicates.DIALECT.resolve(predicate.rule)
-        problems = Predicates.DIALECT.validate(rule, bound=(*symbols, *variables), core=True)
+        constraint = Predicates.DIALECT.resolve(predicate.requires)
+        problems = Predicates.DIALECT.validate(constraint, bound=(*symbols, *variables), core=True)
         if problems:
             raise ValueError(f"the predicate cannot be a query: {'; '.join(problems)}")
-        self.store, self.symbols, self.variables, self.rule = store, symbols, dict(variables), rule
-        conjuncts = [(c, Symbolics.free(c) & set(symbols)) for c in _conjuncts(self.rule)]
+        self.store, self.symbols, self.variables, self.constraint = store, symbols, dict(variables), constraint
+        conjuncts = [(c, Symbolics.free(c) & set(symbols)) for c in _conjuncts(self.constraint)]
         hops = [hop for hop in (_hop(c, symbols) for c, _ in conjuncts) if hop is not None]
         self.order: list[tuple[str, _Hop | None]] = []
         bound: set[str] = set()
@@ -175,7 +176,7 @@ class _Plan:
     def _extend(self, depth: int, scope: dict[str, Any], evaluate: Predicates.Evaluator, unknown: bool
                 ) -> Iterator[Match]:
         if depth == len(self.order):
-            result = Predicates.holds(evaluate, self.rule, scope)
+            result = Predicates.holds(evaluate, self.constraint, scope)
             if result or (unknown and result is None):
                 yield {symbol: scope[symbol] for symbol in self.symbols}
             return
@@ -187,7 +188,7 @@ class _Plan:
 
 
 class Scan:
-    """A queryable store over any store, answering queries by the plan the predicate's rule allows."""
+    """A queryable store over any store, answering queries by the plan the predicate's constraint allows."""
 
     def __init__(self, store: Stores.Store):
         self.store = store

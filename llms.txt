@@ -1,8 +1,8 @@
 # mbse-patterns
 
-> Predicates, queries, distributions and generators over mbse-schemas data, with mbse-expressions' rules. A predicate is a rule over symbols, each bound to an object of a schema, and parameters, kept as data beside the schemas, built fluently, as schemas are, and used by reference (applied to arguments); it applies to matches, combinations of objects. Validators check data against predicates, three-valued (unknown is not false), and queries find a store's matches, streaming lazily, planned from the rule's shape (early tests, hops through relations, `unique` clauses), through a queryable-store protocol with an in-memory implementation over any store. Equivalent Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations write byte-identical JSON.
+> Predicates, queries, distributions and generators over mbse-schemas data, with mbse-expressions' expressions. A predicate is a constraint over symbols, each bound to an object of a schema, and parameters, kept as data beside the schemas, built fluently, as schemas are, and used by reference (applied to arguments); it applies to matches, combinations of objects. Validators check data against predicates, three-valued (unknown is not false), and queries find a store's matches, streaming lazily, planned from the constraint's shape (early tests, hops through relations, `unique` clauses), through a queryable-store protocol with an in-memory implementation over any store. Equivalent Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations write byte-identical JSON.
 
-A pattern is a predicate whose rule weighs alternatives (choices of weighted arms) and draws values from distributions (uniform, normal, Poisson, geometric, categorical), sampled exactly; samplers draw a store's matches by weight, and generators build new data, redrawing until the predicate holds, byte-identically in both languages from one seed. Streaming characterizers are designed for the next release.
+A pattern is a predicate whose constraint weighs alternatives (choices of weighted arms) and draws values from distributions (uniform, normal, Poisson, geometric, categorical), sampled exactly; samplers draw a store's matches by weight, and generators build new data, redrawing until the predicate holds, byte-identically in both languages from one seed. Streaming characterizers are designed for the next release.
 
 ## Why
 
@@ -10,12 +10,12 @@ A pattern is a predicate whose rule weighs alternatives (choices of weighted arm
 
 ## Using it
 
-- [Agent skill](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/SKILL.md): when to use it, the rules that prevent most mistakes, and references loaded per task
+- [Agent skill](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/SKILL.md): when to use it, the practices that prevent most mistakes, and references loaded per task
 - [Python](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/references/python.md) and [TypeScript](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/references/typescript.md): a complete program, cheat sheet and traps
 
 ## Learning it
 
-- [Python tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/python3/tutorials/README.md) and [TypeScript tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/tutorials/README.md): seven case studies, from a rule your data must keep to reproducible generated test data
+- [Python tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/python3/tutorials/README.md) and [TypeScript tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/tutorials/README.md): seven case studies, from a constraint your data must keep to reproducible generated test data
 
 ## Design
 
@@ -25,4 +25,4 @@ A pattern is a predicate whose rule weighs alternatives (choices of weighted arm
 
 - [EQUIVALENCE.md](https://github.com/pitaman71/mbse-patterns/blob/main/docs/EQUIVALENCE.md): how the two implementations differ, deliberately
 - [AGENTS.md](https://github.com/pitaman71/mbse-patterns/blob/main/AGENTS.md): for agents changing this repository
-- [mbse-schemas](https://github.com/pitaman71/mbse-schemas) and [mbse-expressions](https://github.com/pitaman71/mbse-expressions): the data and the rules
+- [mbse-schemas](https://github.com/pitaman71/mbse-schemas) and [mbse-expressions](https://github.com/pitaman71/mbse-expressions): the data and the expressions

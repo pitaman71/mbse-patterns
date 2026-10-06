@@ -4,11 +4,11 @@
 # Patterns
 
 Constraints, queries and patterns over [mbse-schemas](https://github.com/pitaman71/mbse-schemas) data, built on the
-rules of [mbse-expressions](https://github.com/pitaman71/mbse-expressions). This package depends on both (sibling
+expressions of [mbse-expressions](https://github.com/pitaman71/mbse-expressions). This package depends on both (sibling
 checkouts, pinned in `siblings.json`). Their design documents,
 [framework design](https://github.com/pitaman71/mbse-schemas/blob/main/docs/FRAMEWORK.md) and
 [expressions design](https://github.com/pitaman71/mbse-expressions/blob/main/docs/EXPRESSIONS.md), describe the schemas
-and the rules; this document covers what is built from them.
+and the expressions; this document covers what is built from them.
 
 It is planned in releases, each landed and reviewed before the next:
 
@@ -25,7 +25,7 @@ python3/mbse/Patterns/, typescript5/src/
   Predicates     predicates, their application, sets, and the algebra they are written in; its evaluator
   Constraints    reading and writing predicates and distributions as data; check
   Validators     data checked against predicates
-  Queries        a rule as a query; the queryable store protocol; Scan, the in-memory implementation
+  Queries        a constraint as a query; the queryable store protocol; Scan, the in-memory implementation
   Distributions  terms of the algebra that weigh alternatives (Choices) and draw values (Normal, ...)
   Sampling       values drawn from a random source, specified exactly on its words
   Generators     data drawn from a predicate: Generate (new) and Sample (the store's)
@@ -34,16 +34,16 @@ python3/mbse/Patterns/, typescript5/src/
 
 ## Predicates
 
-- **A predicate is a rule over symbols and parameters.** Each symbol is bound to an object of a schema, a named
-  reference object schema as a store registers it; the predicate applies to a *match*, a binding of every symbol to an
-  object of its schema. Each parameter is a value, given where the predicate is applied. The rule is an expression of
-  the predicate algebra (Basic's, mbse-expressions', and the terms below) whose free names are the symbols and
-  parameters: "a contact is an adult" has one symbol, `the`, and the rule `the.age >= 18`; "a person has a name" has a
-  symbol, `person`, a parameter, `name`, and the rule `person.name == name`.
+- **A predicate is a named constraint over symbols and parameters.** Each symbol is bound to an object of a schema, a
+  named reference object schema as a store registers it; the predicate applies to a *match*, a binding of every symbol
+  to an object of its schema. Each parameter is a value, given where the predicate is applied. The constraint it
+  `requires` is an expression of the predicate algebra (Basic's, mbse-expressions', and the terms below) whose free
+  names are the symbols and parameters: "a contact is an adult" has one symbol, `the`, and the constraint `the.age >=
+  18`; "a person has a name" has a symbol, `person`, a parameter, `name`, and the constraint `person.name == name`.
 - **Predicates are built as schemas are.** `OfPredicate.Builder()` is fluent: `.name(...)`, `.description(...)`,
   `.symbols({"the": Contact})` and `.parameters(lambda p: p.name("name"))` (property specs, as an object schema's
   properties are, each with an optional type), added in order, and `.requires(spec)` and `.forbids(spec)`, which add
-  conditions (the rule is their conjunction, and `forbids` adds the negation), finalized by `create()`, `clone()` or
+  conditions (`requires` is their conjunction, and `forbids` adds the negation), finalized by `create()`, `clone()` or
   `update()`, none of which validates. A condition is any spec of the algebra: data, a writer, a term built by its
   builder, or, in Python, what `Python.Text.FromFunction(lambda person, name: person.name == name)` reads from a
   function whose parameters are the symbols and parameters. Elsewhere they are written as Basic variables of the same
@@ -52,14 +52,14 @@ python3/mbse/Patterns/, typescript5/src/
 - **Predicates live beside the schemas.** A schema does not hold its predicates, and mbse-schemas does not depend on
   mbse-expressions; several sets may constrain one schema, and a program chooses which apply.
 - **Predicates are terms.** `OfPredicate` is a kind of the algebra that binds its symbols and parameters within its
-  rule (mbse-expressions' import role), so a predicate is checked, written and read as any expression is, and may be an
-  argument of another term: that is how it is used by reference ([below](#parameters-and-application)). `OfSet`, a set
-  of predicates in order, is a term too, its predicates its arguments.
+  constraint (mbse-expressions' import role), so a predicate is checked, written and read as any expression is, and may
+  be an argument of another term: that is how it is used by reference ([below](#parameters-and-application)). `OfSet`, a
+  set of predicates in order, is a term too, its predicates its arguments.
 - **Predicates are data.** Every term is an mbse-schemas reference object with a meta-schema (`Patterns.Predicate`,
   `Patterns.Set`, ...). Symbols and parameters are value properties, written as an object schema's properties are
   (`Schemas.OfProperty.Schema`): a symbol's schema by name when it has one, which every symbol's has, else inline;
   none are not written. A term is its arguments' parent through Basic's own relation `Expressions.Arguments`, by
-  index, so a rule, or a predicate, shared by several terms is written once.
+  index, so a constraint, or a predicate, shared by several terms is written once.
 - **Writing needs no store; reading resolves names.** Schemas carry their names (mbse-schemas 0.3), so a predicate
   writes its symbols' schemas by name through any store. Reading one back resolves those names, so it goes through
   `Constraints.OfStore(store)`, a store of the terms' bound classes that resolves names in `store`, the user's store of
@@ -67,47 +67,49 @@ python3/mbse/Patterns/, typescript5/src/
   `register(store)` registers the meta-schemas in another store (a `Proxies.OfStore` then holds predicates as
   proxies). A builder holds the symbols it is given as data; only reading a snapshot resolves names.
 - **Predicates are checked when asked**, as terms are (`DIALECT.validate`, or `predicate.validate()`): a symbol whose
-  schema is not a named reference object schema, a missing rule, and the rule's problems as a core rule over the
-  symbols and parameters ("rule: argument 1: variable 'n' is not bound"). `Constraints.check(predicates)` gives a set,
-  and raises `ValueError` with every predicate's problems, labelled by its name, a predicate without a name, and a name
-  two predicates share ("defined twice").
+  schema is not a named reference object schema, a missing `requires`, and its problems as a core constraint over the
+  symbols and parameters ("requires: argument 1: variable 'n' is not bound"). `Constraints.check(predicates)` gives a
+  set, and raises `ValueError` with every predicate's problems, labelled by its name, a predicate without a name, and a
+  name two predicates share ("defined twice").
 
 ## Validators
 
 - **`Validate(store, predicates)(schema, value)`** checks each predicate on its matches among `value` alone, and
   `.Reachable(schema, root)` on its matches among the root and every object reachable from it: every combination of
   those objects whose schemas fit its symbols. The predicates are checked statically when the validator is made, so a
-  rule that cannot be right is reported once.
+  constraint that cannot be right is reported once.
 - **Problems are labelled by match**, each object as mbse-schemas labels it, by schema name and position in
   `Reachable.of` order: `c=Contact#2, p=Phone#5: 'OwnedNumbered' does not hold`. A value of another schema than the
   one given is reported as mbse-schemas does.
-- **Unknown is not false.** A rule is unknown when a property it reads is absent; `unknown` decides: `report` (the
+- **Unknown is not false.** A constraint is unknown when a property it reads is absent; `unknown` decides: `report` (the
   default) gives `the=Contact#2: 'IsAnAdult' is unknown`, `ignore` gives nothing, and `violation` reports it as not
   holding.
-- **A rule that raises is reported in place**, with the class and message of what it raised, and the other predicates
-  and matches are still checked; a rule that gives a value other than a bool raises `TypeError`, reported so.
+- **A constraint that raises is reported in place**, with the class and message of what it raised, and the other
+  predicates and matches are still checked; a constraint that gives a value other than a bool raises `TypeError`,
+  reported so.
 - **Structure is mbse-schemas' to check.** `Validators.Validate(store)` checks values against schemas; this checks them
   against predicates. Run both.
 
 ## Queries
 
 - **A predicate is a query.** `select(predicate, variables, unknown)` gives the predicate's matches among the store's
-  data for which its rule holds, each a mapping from symbol to object; `variables` binds the rule's other names, and
-  `unknown` also gives the matches for which it is unknown.
+  data for which its constraint holds, each a mapping from symbol to object; `variables` binds the constraint's other
+  names, and `unknown` also gives the matches for which it is unknown.
 - **Results stream lazily.** `select` returns an iterator. The predicate is checked when `select` is called, which
   raises for no symbols, a symbol's schema that is not a named reference object schema or that the store does not
-  hold, a variable named like a symbol, or a rule that is not a core Basic rule over the symbols and the variables; the
-  extents are read only as matches are asked for. A rule that does not give a bool raises as it is evaluated.
+  hold, a variable named like a symbol, or a constraint that is not a core Basic constraint over the symbols and the
+  variables; the extents are read only as matches are asked for. A constraint that does not give a bool raises as it is
+  evaluated.
 - **A query sees the store's data.** Its candidates come from the symbols' extents, which in mbse-schemas are what the
   store's singletons reach: objects built with the store's builders but never linked to its data are transient, and no
   query finds them.
-- **The matches are the cross product, and the rule's shape says what is practical.** The meaning of a query is the
-  cross product of its symbols' extents, filtered by the rule; how the matches are found is the implementation's to
-  choose, judiciously, from the rule's shape. `Scan(store)`, the in-memory implementation for any store, plans each
-  query:
-  - The rule's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a partial match
-    that fails one is never extended; those that read only variables are tested once, first, and a rule they decide
-    false yields nothing.
+- **The matches are the cross product, and the constraint's shape says what is practical.** The meaning of a query is
+  the cross product of its symbols' extents, filtered by the constraint; how the matches are found is the
+  implementation's to choose, judiciously, from the constraint's shape. `Scan(store)`, the in-memory implementation for
+  any store, plans each query:
+  - The constraint's top-level conjuncts (`and`) are tested as soon as the symbols they read are bound, so a partial
+    match that fails one is never extended; those that read only variables are tested once, first, and a constraint they
+    decide false yields nothing.
   - A conjunct `any(e in entries(a, 'adjacency'), e.link == b)`, as `Contains(a.adjacency, lambda e: e.link == b)`
     writes it, a hop, relates two symbols through a relation: `b`'s candidates are then the targets of `a`'s entries through `link`, those of `b`'s schema, not `b`'s whole extent.
   - The relation's `unique` clauses say how far a hop fans out: when one makes `a`'s end the key of the relation's
@@ -116,9 +118,9 @@ python3/mbse/Patterns/, typescript5/src/
   - A symbol no hop reaches is scanned. Symbols that a hop from another could reach are scanned last, so that the hop
     is taken instead; otherwise symbols are scanned in their declared order.
 - **`Scan.explain(predicate, variables)`** describes the plan, one line per symbol (`p: c.phones to phone, any number,
-  then 2 tests`), so that the plan is tested, and explained to whoever writes the rule.
+  then 2 tests`), so that the plan is tested, and explained to whoever writes the constraint.
 - **`QueryableStore` is the protocol**: `Stores.Store` with `select`. A store that answers queries natively (a database,
-  a cache slice) implements `select` itself, translating the rule into its own query language where it can, and
+  a cache slice) implements `select` itself, translating the constraint into its own query language where it can, and
   `select(store, ...)` asks a queryable store and scans any other.
 
 ## The predicate algebra
@@ -166,15 +168,15 @@ is applied in several places and written once.
 
 - **`HasName(pred.person, "alice")` applies a predicate** (`HasName.call(...)` in TypeScript, where an object is not
   callable): an `OfApply` term (`Patterns.OfApply`) whose first argument is the predicate itself and whose others are
-  specs for its symbols and then its parameters, in order. It holds when the predicate's rule holds with them bound;
-  `Evaluator(store)` evaluates it so. Its problems are a wrong number of arguments ("'HasName' takes 2 arguments, got
-  1") and a first argument that is not a predicate; a predicate that applies itself is a cycle.
-- **A predicate with parameters is checked where it is applied**: a validator refuses one, since its rule holds only
-  for values of its parameters; a query takes them as variables (`select(HasName, {"name": "alice"})`).
+  specs for its symbols and then its parameters, in order. It holds when the predicate's `requires` holds with them
+  bound; `Evaluator(store)` evaluates it so. Its problems are a wrong number of arguments ("'HasName' takes 2 arguments,
+  got 1") and a first argument that is not a predicate; a predicate that applies itself is a cycle.
+- **A predicate with parameters is checked where it is applied**: a validator refuses one, since its constraint holds
+  only for values of its parameters; a query takes them as variables (`select(HasName, {"name": "alice"})`).
 
 ## Distributions
 
-Built in 0.3 and 0.4. A pattern is a predicate: the terms of `Distributions`, in its rule, say how its matches are
+Built in 0.3 and 0.4. A pattern is a predicate: the terms of `Distributions`, in its constraint, say how its matches are
 distributed, so that one predicate is validated, queried, sampled from and generated from alike. They are kinds of the
 algebra (`Predicates.DIALECT`), each built by a builder:
 
@@ -211,8 +213,8 @@ People = Predicates.OfPredicate.Builder().name("People").symbols({"person": Pers
   with (`person.age`, here) must be in the distribution's support (an int for a rounded normal, a number for a normal,
   [low, high] or [low, high) for a uniform, an int from 0 for a Poisson or a geometric, one of a categorical's literal
   values), and the body must hold with the symbol bound to it. It is unknown when its body has no witness.
-- **A match weighs what its arms say** (`Evaluator.weigh(rule, match)`): nothing unless the rule holds; then the
-  product, over the choices on its conjuncts (through applications), of the weight of the arm the match falls under
+- **A match weighs what its arms say** (`Evaluator.weigh(constraint, match)`): nothing unless the constraint holds; then
+  the product, over the choices on its conjuncts (through applications), of the weight of the arm the match falls under
   (with `decreasing`) or the sum of the weights of the arms that hold, each times what the match weighs under the
   arm's condition.
 - **Types are checked statically**: `domain(distribution)` tells the native type a distribution gives (`int`, `float`,
@@ -257,17 +259,17 @@ as any other.
 
 - **Each step draws from its own stream**, `random.split(str(step))`, so a step's objects do not depend on how many
   were drawn before it, and one seed gives the same data in both languages.
-- **A step walks the rule**, through conjunctions and applications of predicates (an argument neither a symbol nor a
-  literal is evaluated for the walk): a `Choices` chooses an arm by weight, from the step's stream split by `"choices
+- **A step walks the constraint**, through conjunctions and applications of predicates (an argument neither a symbol nor
+  a literal is evaluated for the walk): a `Choices` chooses an arm by weight, from the step's stream split by `"choices
   <n>"`; a distribution draws a value, from the attempt's stream split by its symbol, so that adding a distribution
   does not change the others, and the walk goes on into its body with the symbol bound to the value; an equality
   `x.p == v` (`v` a literal or a drawn value, `x` a symbol) sets `x`'s property `p`, unless an earlier one has.
-- **What it builds must pass**: the rule must hold of the match, each arm chosen must hold, and with `decreasing` be
-  the first of its choices to hold. If not, the step draws its values again, from its stream split by `"attempt 1"`,
+- **What it builds must pass**: the constraint must hold of the match, each arm chosen must hold, and with `decreasing`
+  be the first of its choices to hold. If not, the step draws its values again, from its stream split by `"attempt 1"`,
   ..., keeping its arms, up to `ATTEMPTS` (100), and raises `ValueError` ("the predicate cannot be generated: none of
-  its 100 attempts satisfies it"); a rule that draws nothing has one attempt ("the predicate cannot be generated from
-  its equalities and choices: what they build does not satisfy it"). Rejection makes the draws conditioned on the
-  rule: seniors' ages are a normal restricted to 65 and over.
+  its 100 attempts satisfies it"); a constraint that draws nothing has one attempt ("the predicate cannot be generated
+  from its equalities and choices: what they build does not satisfy it"). Rejection makes the draws conditioned on the
+  constraint: seniors' ages are a normal restricted to 65 and over.
 - **A predicate is checked first** (`check`): its problems, its distributions' types, and parameters, which only an
   application binds.
 
@@ -285,19 +287,24 @@ entries, from a family the caller chooses (or the best of several by a criterion
 
 ## Open questions
 
-- Native queries: how a database store translates a Basic rule into its query language, and what it does with a rule
-  it cannot translate (scan, or refuse).
+- **Generating by resolving.** A specification is executed nondeterministically by choosing values consistent with
+  every constraint ([MBSE.md](../MBSE.md#what-a-specification-is-made-of)). The generators draw values, then check
+  `requires` and draw again until it holds (`ATTEMPTS`); they do not resolve constraints to restrict what they draw,
+  which is how a constraint such as `total = sum(items)` would determine a value rather than reject draws. That waits on
+  resolving constraints in mbse-expressions (its Open questions).
+- Native queries: how a database store translates a Basic constraint into its query language, and what it does with a
+  constraint it cannot translate (scan, or refuse).
 - Standing queries, emitting objects as they enter or leave the matching set while the store changes, need mbse-schemas
   to notify changes, which waits on its mutations and transactions.
 - Asynchronous queries (`AsyncIterator`) for stores whose reads are asynchronous, in TypeScript especially.
-- Predicates over value objects: a match binds reference objects, from extents; a rule about a value object is
-  written today as a rule about its owner.
+- Predicates over value objects: a match binds reference objects, from extents; a constraint about a value object is
+  written today as a constraint about its owner.
 - Checking statically that what a generator draws satisfies the predicate (a solver), rather than by rejection, and
   drawing from a distribution truncated to its body directly.
-- Generating related objects: a rule that requires links (`Exists`, `Contains`) between its symbols, or to objects the
-  store already holds, and distributions of an adjacency's number of entries.
+- Generating related objects: a constraint that requires links (`Exists`, `Contains`) between its symbols, or to objects
+  the store already holds, and distributions of an adjacency's number of entries.
 - A distribution's density in `weigh`, so that sampling and characterizing weigh values, not only arms.
-- Planning inside quantifiers, and partial evaluation of rules over the algebra (Basic's reducer does not take its
+- Planning inside quantifiers, and partial evaluation of constraints over the algebra (Basic's reducer does not take its
   terms).
 - More shapes for the planner: hops in the other direction (from `b` to `a` through `b`'s own adjacency), equality on
   keys, and ordering scans by extent size.
@@ -308,14 +315,14 @@ entries, from a family the caller chooses (or the best of several by a criterion
   on mbse-expressions, and several sets may apply to one schema.
 - A predicate names its symbols and their schemas (`.symbols({"the": Contact})`) and applies to matches; there is no
   implicit `this`. A predicate is built as schemas are, by a fluent builder.
-- The matches of several symbols are the cross product of their extents; a rule's shape communicates what is practical,
-  and the implementation optimizes from it, relations' `unique` clauses included.
+- The matches of several symbols are the cross product of their extents; a constraint's shape communicates what is
+  practical, and the implementation optimizes from it, relations' `unique` clauses included.
 - Symbols are written by their schemas' names, which schemas carry (mbse-schemas 0.3), so writing a predicate needs no
   store; reading resolves the names in one.
-- Queries are this package's, not an extension in mbse-expressions; mbse-expressions keeps the rules.
+- Queries are this package's, not an extension in mbse-expressions; mbse-expressions keeps the expressions.
 - A query streams lazily over the store's data first; standing queries come later.
-- A pattern is a predicate: weighted alternatives (`Choices`) and distributions of values are terms of its rule, as
-  any condition is; a distribution binds a symbol, and its body's equalities set properties; an unreleased draft's
+- A pattern is a predicate: weighted alternatives (`Choices`) and distributions of values are terms of its constraint,
+  as any condition is; a distribution binds a symbol, and its body's equalities set properties; an unreleased draft's
   separate distributions of cases and draws were dropped for it, and `Choices` replaced 0.3's `Choice`.
 - Generated data is byte-identical across implementations from a seed.
 - A random source is given to whatever draws from it (`Stores.Random`, in mbse-schemas), not held by a store, which
@@ -335,7 +342,7 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - Sampling is specified on the random source's words alone, with integer arithmetic and correctly rounded IEEE 754
   operations, so that both languages draw the same values; transcendental functions are ported rather than taken
   from each language's library.
-- A predicate links its rule through `Expressions.Arguments`, whose argument end Basic's kinds already declare
+- A predicate links its constraint through `Expressions.Arguments`, whose argument end Basic's kinds already declare
   (`used_by`), so mbse-schemas' validation accepts the link; a relation of this package's would need Basic's kinds to
   declare it.
 

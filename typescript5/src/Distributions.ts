@@ -1,8 +1,8 @@
 /**
  * Distributions: terms of the predicate algebra that weigh alternatives and draw values.
  *
- * A pattern is a predicate: its rule says what holds of a match, and these terms, in its rule, say how matches are
- * distributed, so that one predicate is validated, queried, sampled from and generated from alike.
+ * A pattern is a predicate: its constraint says what holds of a match, and these terms, in its constraint, say how
+ * matches are distributed, so that one predicate is validated, queried, sampled from and generated from alike.
  *
  *     const APerson = { person: Person };
  *     const People = new Predicates.OfPredicate.Builder().name("People").symbols(APerson).requires(
@@ -49,11 +49,11 @@ function positive(kind: string, weight: unknown): string[] {
 }
 
 function conjunction(conditions: unknown[]): unknown {
-  let rule: unknown = null;
+  let constraint: unknown = null;
   for (const condition of conditions) {
-    rule = rule === null ? condition : E.operation("and", rule as E.OfAny.Spec, condition as E.OfAny.Spec).data;
+    constraint = constraint === null ? condition : E.operation("and", constraint as E.OfAny.Spec, condition as E.OfAny.Spec).data;
   }
-  return rule;
+  return constraint;
 }
 
 /** The argument a builder holds at `index`, if any. */
@@ -534,7 +534,7 @@ export function witness(drawn: Drawn): unknown {
 
 /** The problems of a predicate's distributions that set a property of its symbols (`person.age == age`, in the
  * distribution's body) to values of another type than the property's, as far as their domains tell. */
-export function typing(predicate: { symbols: ReadonlyMap<string, unknown>; rule: unknown }): string[] {
+export function typing(predicate: { symbols: ReadonlyMap<string, unknown>; requires: unknown }): string[] {
   const problems: string[] = [];
   const visit = (node: unknown): void => {
     if (node instanceof Terms.Term && node.kind().KIND === "predicate") return; // an applied predicate's are its own
@@ -556,6 +556,6 @@ export function typing(predicate: { symbols: ReadonlyMap<string, unknown>; rule:
     }
     for (const argument of node instanceof Terms.Term ? node.argumentsOf() : []) visit(argument);
   };
-  visit(predicate.rule);
+  visit(predicate.requires);
   return problems;
 }

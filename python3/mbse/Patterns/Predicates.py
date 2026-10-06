@@ -1,8 +1,8 @@
-"""Predicates: named rules over a store's objects, and the predicate algebra they are written in.
+"""Predicates: named constraints over a store's objects, and the predicate algebra they are written in.
 
-A predicate is a rule over symbols, each bound to an object of a schema, and parameters, each a value; it applies to a
-*match*, a binding of every symbol to an object of its schema. It is built as schemas are, by a fluent builder finalized
-by `create()`, `clone()` or `update()`, none of which validates:
+A predicate is a named constraint over symbols, each bound to an object of a schema, and parameters, each a value; it
+applies to a *match*, a binding of every symbol to an object of its schema. It is built as schemas are, by a fluent
+builder finalized by `create()`, `clone()` or `update()`, none of which validates:
 
     APerson = {"person": Person}
     HasName = (
@@ -15,17 +15,17 @@ by `create()`, `clone()` or `update()`, none of which validates:
     )
 
 `.parameters(...)` takes property specs, as an object schema's `.properties(...)` does, each with a name and, optionally,
-a type. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold; the rule is
-their conjunction. A condition is any spec of the algebra: a term, a writer, or what `Python.Text.FromFunction` reads
+a type. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold; its `requires`
+is their conjunction. A condition is any spec of the algebra: a term, a writer, or what `Python.Text.FromFunction` reads
 from a function whose parameters are the symbols and parameters. A builder gives the variables it declares by name, so
 `pred.person` is the variable `person` once `pred.symbols(APerson)` declares it. A predicate without symbols is a
 statement about the whole store; one without a name is written inline, where it is used.
 
 A predicate is a term of the algebra, `DIALECT`, which extends mbse-expressions' Basic: it binds its symbols and
-parameters within its rule (an import, in mbse-expressions' terms). Applying it, `HasName(pred.person, "alice")`, is a
+parameters within `requires` (an import, in mbse-expressions' terms). Applying it, `HasName(pred.person, "alice")`, is a
 term too, `OfApply`, which holds the predicate itself, by reference, and arguments for its symbols and then its
-parameters, in order: it holds when the predicate's rule holds with them bound. A predicate used in several places is one
-object, and is written once.
+parameters, in order: it holds when the predicate's `requires` holds with them bound. A predicate used in several places
+is one object, and is written once.
 
 The algebra's other terms, each a data class with a builder, are built as a predicate is, from a spec (data, or a
 callable taking the builder):
@@ -80,10 +80,10 @@ def _schema_name(schema: Any) -> str:
 
 def _conjunction(conditions: list[Any]) -> Any:
     """The conditions' conjunction, left to right; None if there are none."""
-    rule = None
+    constraint = None
     for condition in conditions:
-        rule = condition if rule is None else E.operation("and", rule, condition).data
-    return rule
+        constraint = condition if constraint is None else E.operation("and", constraint, condition).data
+    return constraint
 
 
 def _negation(spec: Any) -> Any:
@@ -176,7 +176,7 @@ class OfExists(_Quantified):
 
 @dataclass(eq=False)
 class OfPredicate(Terms.Term):
-    """A rule over symbols and parameters, which it binds within the rule. Calling it, `predicate(*arguments)`, applies
+    """A constraint over symbols and parameters, which it binds within the constraint it `requires`. Calling it, `predicate(*arguments)`, applies
     it: see `OfApply`."""
 
     KIND = "predicate"
@@ -184,10 +184,10 @@ class OfPredicate(Terms.Term):
     PROPERTIES = {"name": str, "description": str}
     OPTIONAL = frozenset({"name", "description"})
     VALUES = {"symbols": SYMBOLS, "parameters": PARAMETERS}
-    SLOTS = ("rule",)
+    SLOTS = ("requires",)
     name: str | None = None
     description: str | None = None
-    rule: Any = None
+    requires: Any = None
     symbols: dict[str, Any] = field(default_factory=dict)  # symbol -> schema
     parameters: dict[str, Any] = field(default_factory=dict)  # parameter -> type, or None
 
@@ -216,7 +216,7 @@ class OfPredicate(Terms.Term):
 
 @dataclass(eq=False)
 class OfApply(Terms.Term):
-    """A predicate applied to arguments, for its symbols and then its parameters: whether its rule holds with them
+    """A predicate applied to arguments, for its symbols and then its parameters: whether its `requires` holds with them
     bound."""
 
     KIND = "apply"
@@ -328,7 +328,7 @@ class _ExtentBuilder(Terms.Builder):
 class _PredicateBuilder(Terms.Builder, Declaring):
     """Builds a predicate. DSL: `.name(str)`, `.description(str)`, `.symbols({name: schema})` and `.parameters(*specs)`,
     each added to those already given, in order, and `.requires(spec)` and `.forbids(spec)`, which add conditions to
-    the rule. `.symbols(...)` and `.parameters(...)` are written as the builder is finalized."""
+    `requires`. `.symbols(...)` and `.parameters(...)` are written as the builder is finalized."""
 
     _data = OfPredicate
 
@@ -375,22 +375,22 @@ class _PredicateBuilder(Terms.Builder, Declaring):
         made.symbols, made.parameters = dict(self._symbols), dict(self._parameters)
         return made
 
-    def _rule(self) -> None:
+    def _write_requires(self) -> None:
         if self._conditions:
-            rule = next((entry.links.get("argument") for entry in self.state.entries.get("arguments", [])), None)
-            self.argument("rule", _conjunction([*([] if rule is None else [rule]), *self._conditions]))
+            constraint = next((entry.links.get("argument") for entry in self.state.entries.get("arguments", [])), None)
+            self.argument("requires", _conjunction([*([] if constraint is None else [constraint]), *self._conditions]))
             self._conditions = []
 
     def create(self) -> Any:
-        self._rule()
+        self._write_requires()
         return self._fold(super().create())
 
     def clone(self) -> Any:
-        self._rule()
+        self._write_requires()
         return self._fold(super().clone())
 
     def update(self) -> Any:
-        self._rule()
+        self._write_requires()
         return self._fold(super().update())
 
 
@@ -510,7 +510,7 @@ class Evaluator:
     def _apply(self, thunks: Any, node: OfApply, scope: Any) -> Any:
         predicate = node.predicate
         values = [thunk() for thunk in thunks[1:]]
-        return self.interpreter(predicate.rule, dict(zip(predicate.binds(), values)))
+        return self.interpreter(predicate.requires, dict(zip(predicate.binds(), values)))
 
     def held(self, node: Distributions.Choices, scope: Any) -> list[bool | None]:
         """Whether each of a choices' arms holds, in order."""
@@ -525,20 +525,20 @@ class Evaluator:
                  for n in range(least, least + held.count(None) + 1)}  # every count the unknown arms allow
         return found.pop() if len(found) == 1 else None
 
-    def weigh(self, rule: Any, scope: Mapping[str, Any]) -> float:
-        """What a match weighs under a rule: 0.0 unless the rule holds; then the product, over the choices on its
+    def weigh(self, constraint: Any, scope: Mapping[str, Any]) -> float:
+        """What a match weighs under a constraint: 0.0 unless the constraint holds; then the product, over the choices on its
         conjuncts, of the weight of the arm the match falls under (the first that holds, with `decreasing`) or the sum
         of those of the arms that hold, each times what the match weighs under the arm's condition."""
         variables = Symbolics.Variables(dict(scope))
-        return self._weigh(DIALECT.resolve(rule), variables) if self.interpreter.evaluate(
-            DIALECT.resolve(rule), variables, set()) is True else 0.0
+        return self._weigh(DIALECT.resolve(constraint), variables) if self.interpreter.evaluate(
+            DIALECT.resolve(constraint), variables, set()) is True else 0.0
 
     def _weigh(self, node: Any, scope: Any) -> float:
         if isinstance(node, E.OfOperation.Data) and node.name == "and" and len(node.arguments) == 2:
             return self._weigh(node.arguments[0], scope) * self._weigh(node.arguments[1], scope)
         if isinstance(node, OfApply):
             values = [self.interpreter.evaluate(argument, scope, set()) for argument in node.arguments]
-            return self._weigh(node.predicate.rule, Symbolics.Variables(dict(zip(node.predicate.binds(), values))))
+            return self._weigh(node.predicate.requires, Symbolics.Variables(dict(zip(node.predicate.binds(), values))))
         if isinstance(node, Distributions.Choices):
             weights = [arm.weight * self._weigh(arm.condition, scope)
                        for arm, holds in zip(node.arms, self.held(node, scope)) if holds is True]
@@ -548,14 +548,14 @@ class Evaluator:
 
 def _truth(value: Any) -> bool | None:
     if value is not None and type(value) is not bool:
-        raise TypeError(f"a predicate must be a bool, got {type(value).__name__}")
+        raise TypeError(f"a constraint must be a bool, got {type(value).__name__}")
     return value
 
 
-def holds(evaluate: Evaluator, rule: Any, scope: Mapping[str, Any]) -> bool | None:
-    """The rule's value with `scope` bound: `True`, `False` or unknown (`None`); a rule that gives anything else
+def holds(evaluate: Evaluator, constraint: Any, scope: Mapping[str, Any]) -> bool | None:
+    """The constraint's value with `scope` bound: `True`, `False` or unknown (`None`); a constraint that gives anything else
     raises."""
-    result = evaluate.interpreter(rule, scope)
+    result = evaluate.interpreter(constraint, scope)
     if result is not None and type(result) is not bool:
-        raise TypeError(f"a predicate must be a bool, got {type(result).__name__}")
+        raise TypeError(f"a constraint must be a bool, got {type(result).__name__}")
     return result

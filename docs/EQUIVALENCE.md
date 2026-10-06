@@ -18,13 +18,13 @@ language. Any other difference is a bug.
 | A predicate's symbols and parameters | `.symbols({...})` takes a mapping; `symbols` and `parameters` are dicts | `.symbols(...)` takes a record or a `Map`; `symbols` and `parameters` are `Predicates.Symbols`, a `Map` with `equals`, so that `Terms.same` compares them as Python compares dicts | the language's own, in order | CON-01, DST-05 |
 | Applying a predicate | `HasName(person, "alice")`, or `HasName.call(...)` | `HasName.call(person, "alice")` | an object is not callable in JavaScript | CON-07 |
 | A name a builder has not declared | `pred.nope` raises `AttributeError` | `pred.nope` is `undefined` | a proxy's missing property | CON-01 |
-| A rule read from a function | `Python.Text.FromFunction(lambda the: ...)` | none: rules are written with writers | a JavaScript function has no Python source | CON-01 |
+| A constraint read from a function | `Python.Text.FromFunction(lambda the: ...)` | none: constraints are written with writers | a JavaScript function has no Python source | CON-01 |
 | `Contains`'s condition | read from the function's source, as `FromFunction` reads it: `lambda e: e.phone == p` | called with a variable named after its one parameter, read from the function's source: `(e) => e.phone.eq(p)` | no operator overloading, and no Python source; both give the same expression, and refuse a function of other than one parameter | ALG-01 |
 | A term's arguments (a set's predicates, a distribution's cases) | a tuple | an array | as mbse-expressions' terms | CON-03, DST-01 |
 | Identities | `id(self)` | a string unique to the term (`"expression 3"`), as mbse-expressions' | mbse-schemas keys identities by `String(identity())` | CON-01, CON-04 |
 | Integers | `int` | `bigint` (`18n`); a `number` is a float | as in mbse-schemas | throughout |
 | YAML | `description: 18 or older` | `description: '18 or older'` | mbse-schemas' YAML writers quote differently; both read back the same, and JSON is byte-identical | CONF-02, CONF-03 |
-| The predicate algebra's evaluator | `Predicates.Evaluator(store)(rule, variables)`, a callable | `new Predicates.Evaluator(store).run(rule, variables)` | no callable instances | ALG-02 |
+| The predicate algebra's evaluator | `Predicates.Evaluator(store)(constraint, variables)`, a callable | `new Predicates.Evaluator(store).run(constraint, variables)` | no callable instances | ALG-02 |
 | Weights | floats; an `int` weight is refused by `Sampling.weighted` | numbers, all floats | TypeScript has one number type | GEN-01 |
 | Random words and bounds | `int`s | `bigint`s (`next_u32()`, `below(random, 6n)`, `PCG32(42n)`) | as mbse-schemas' `Stores.Random` | GEN-01 |
 | What a generator sets | `settings(predicate)` is `{symbol: {property: value}}`, dicts | `Map`s of `Map`s | the language's own mappings | GEN-02 |
