@@ -11,10 +11,10 @@ undecided, and reported in `undecided`. A candidate is an enabled step with valu
 finite (a `bool`, or a union of options: branches that are value objects with no properties, whose values are the
 branches' names), one candidate per combination; a parameter of any other domain stays open until answered
 (`candidate.answer(name=value)`). Candidates are ordered: those of transforms with parameters first, then by the
-transforms' order, then by their matches (each object by its label), then by their values' order in their domains. A
-session labels each object when it first sees it, by its schema's name and a number, in the order of the schema's
-extent then (`Item#0`, `Item#1`), and keeps the label for the session, since a rewrite may reorder an extent; a
-composite's session shares its parent's labels.
+transforms' order, then by their matches (each object in the order the session first saw it), then by their values'
+order in their domains. A session names each object by its path when it first sees it (mbse-schemas' `Paths`:
+`Shelf/items[0]`, or a schema's name), and keeps the name and the order for the session, since a rewrite may reorder
+an extent; a composite's session shares its parent's.
 
 `take(candidate)` takes one, as the caller decides; `step_in(candidate)` opens a composite's own session, scoped to its
 match (its parts' matches agree with it on the symbols they share), whose steps the caller then takes; the composite's
@@ -26,7 +26,13 @@ A candidate no clause weighs is not the policy's to take. Resolution is linear: 
 found again, so taking one disables another that the step's rewrite made done.
 
 `session.trace(store)` writes the steps taken as data, a `Transforms.Trace` object in a store that `register` prepared,
-which JSON and YAML write byte-identically in both implementations.
+which JSON and YAML write byte-identically in both implementations; `steps(store, trace)` reads them back.
+
+A rerun reuses decisions. A step's `key` is its transform and its match's paths (`Label(i=Shelf/items[0])`); a session
+given `earlier` steps takes, before any policy, each candidate an earlier step with its key decided with the same
+arguments, recorded as `reused` (a composite's own steps are reused inside it), so `run()` without a policy takes only
+those. `orphans` are the earlier decisions not taken again whose key no candidate has. `diff(earlier, later)` gives the
+steps added, removed and changed (the same key, other arguments), a composite's own steps under its key.
 """
 
 from __future__ import annotations
@@ -36,11 +42,12 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from mbse.Schemas.Framework import Plain, Schemas, Visitors
+from mbse.Schemas.Framework import Paths, Plain, Schemas, Visitors
 
 from . import Predicates, Queries
 
-__all__ = ["Transform", "Candidate", "Session", "Policy", "Clause", "Step", "TRACE", "Trace", "register"]
+__all__ = ["Transform", "Candidate", "Session", "Policy", "Clause", "Step", "Diff", "diff", "steps", "TRACE", "Trace",
+           "register"]
 
 TRACE = "Transforms.Trace"
 
@@ -158,7 +165,7 @@ class Policy:
 
 @dataclass(frozen=True)
 class Step:
-    """A step taken: its transform's name, its match by labels, its arguments, who decided it, and a composite's mode and
+    """A step taken: its transform's name, its match by paths, its arguments, who decided it, and a composite's mode and
     own steps."""
 
     transform: str
@@ -168,19 +175,27 @@ class Step:
     mode: str | None = None
     steps: tuple[Step, ...] = ()
 
+    @property
+    def key(self) -> str:
+        """The choice it decided: its transform and its match, `Dataclass(s=Contact)`."""
+        return f"{self.transform}({', '.join(f'{symbol}={path}' for symbol, path in self.match)})"
+
 
 class _Labels:
-    """Each object's label, given when a session first sees it: its schema's name and a number, in extent order."""
+    """Each object's path and place, given when a session first sees it: its path in the store (mbse-schemas' `Paths`),
+    and a number in the order of its schema's extent then, which orders matches."""
 
     def __init__(self) -> None:
         self._labels: dict[Any, tuple[str, int]] = {}
         self._counts: dict[str, int] = {}
 
     def see(self, store: Any, names: Iterable[str]) -> None:
+        paths = None
         for name in names:
             for value in store.extent(name):
                 if value.identity() not in self._labels:
-                    self._labels[value.identity()] = (name, self._counts.get(name, 0))
+                    paths = paths or Paths.of(store)
+                    self._labels[value.identity()] = (paths.of(value), self._counts.get(name, 0))
                     self._counts[name] = self._counts.get(name, 0) + 1
 
     def of(self, value: Visitors.Visitable) -> tuple[str, int]:
@@ -191,12 +206,13 @@ class Session:
     """Applies `transforms` to the data of `store`, one step per decision (see the module's documentation)."""
 
     def __init__(self, store: Any, transforms: Iterable[Transform], scope: Mapping[str, Visitors.Visitable] | None = None,
-                 labels: _Labels | None = None):
+                 labels: _Labels | None = None, earlier: Iterable[Step] = ()):
         self.transforms = tuple(transforms)
         problems = [problem for transform in self.transforms for problem in transform.check()]
         if problems:
             raise ValueError("; ".join(problems))
         self.store, self._scope, self._labels = store, dict(scope or {}), labels or _Labels()
+        self._earlier = {step.key: step for step in earlier}
         self.steps: list[Step] = []
         self.undecided: list[str] = []
         self._child: tuple[Candidate, Session, str, str, tuple[tuple[str, str], ...]] | None = None
@@ -205,7 +221,7 @@ class Session:
     # --- Matches and candidates ---
 
     def _paths(self, match: Mapping[str, Visitors.Visitable]) -> tuple[tuple[str, str], ...]:
-        return tuple((symbol, "{}#{}".format(*self._labels.of(value))) for symbol, value in match.items())
+        return tuple((symbol, self._labels.of(value)[0]) for symbol, value in match.items())
 
     def _enabled(self) -> list[Candidate]:
         evaluate = Predicates.Evaluator(self.store)
@@ -265,7 +281,9 @@ class Session:
             where = ", ".join(f"{symbol}={path}" for symbol, path in paths)
             raise ValueError(f"{candidate.transform.name!r} did not establish its after at {where}")
         arguments = tuple((name, candidate.arguments[name]) for name in candidate.transform.parameters)
-        self.steps.append(Step(candidate.transform.name, paths, arguments, by, mode, steps))
+        step = Step(candidate.transform.name, paths, arguments, by, mode, steps)
+        self._earlier.pop(step.key, None)  # decided now, whoever decided it
+        self.steps.append(step)
         self._candidates = self._enabled()
 
     def _apply(self, candidate: Candidate, by: str) -> None:
@@ -294,34 +312,64 @@ class Session:
         if candidate.open:
             raise ValueError(f"{candidate.transform.name!r} has open parameters {list(candidate.open)}")
         self._find(candidate)
-        child = Session(self.store, candidate.transform.parts, {**self._scope, **candidate.match}, self._labels)
+        earlier = self._earlier.get(self._key_of(candidate))
+        child = Session(self.store, candidate.transform.parts, {**self._scope, **candidate.match}, self._labels,
+                        earlier.steps if earlier is not None else ())
         self._child = (candidate, child, mode, by, self._paths(candidate.match))
         return child
 
-    def step_over(self, policy: Policy) -> bool:
-        """Takes the candidate the policy ranks first, a composite as a whole, and says whether it took a step. Inside a
-        composite the caller stepped into, it steps there. It takes nothing where no clause weighs the first candidate,
-        or the policy cannot answer its open parameters, or a composite's own session stops."""
+    def _key_of(self, candidate: Candidate) -> str:
+        return Step(candidate.transform.name, self._paths(candidate.match), (), "").key
+
+    def _reusable(self) -> Candidate | None:
+        """The first candidate, in order, that an earlier decision with its key decided, its open parameters answered as
+        then."""
+        for candidate in self._candidates:
+            earlier = self._earlier.get(self._key_of(candidate))
+            if earlier is None:
+                continue
+            values = dict(earlier.arguments)
+            if all(name in values and _same(values[name], value) for name, value in candidate.arguments.items()) and all(
+                    name in values for name in candidate.open):
+                return candidate.answer(**{name: values[name] for name in candidate.open}) if candidate.open else candidate
+        return None
+
+    def step_over(self, policy: Policy | None = None) -> bool:
+        """Takes one step, as decided before or by the policy, and says whether it took one: the first candidate an
+        earlier decision decides (see `earlier`), else the candidate the policy ranks first; a composite as a whole.
+        Inside a composite the caller stepped into, it steps there. It takes nothing where no earlier decision applies
+        and there is no policy, no clause weighs the first candidate, or the policy cannot answer its open parameters,
+        or a composite's own session stops."""
         if self._child is not None and not self._child[1].done:
             return self._child[1].step_over(policy)
-        ranked = self.candidates(policy)
-        if not ranked or ranked[0].score <= 0:
-            return False
-        candidate = ranked[0]
-        candidate = candidate.answer(**policy.answers(candidate)) if candidate.open else candidate
-        if candidate.open:
-            return False
+        self._closed()
+        candidate, by = self._reusable(), "reused"
+        if candidate is None:
+            ranked = self.candidates(policy) if policy is not None else []
+            if not ranked or ranked[0].score <= 0:
+                return False
+            candidate, by = ranked[0], "policy"
+            candidate = candidate.answer(**policy.answers(candidate)) if candidate.open else candidate  # type: ignore[union-attr]
+            if candidate.open:
+                return False
         if not candidate.transform.parts:
-            self._apply(candidate, "policy")
+            self._apply(candidate, by)
             return True
-        child = self._open(candidate, "over", "policy")
+        child = self._open(candidate, "over", by)
         child.run(policy)
         if child.done:
             self._closed()
         return True
 
-    def run(self, policy: Policy) -> int:
-        """Steps over until the session is done or the policy cannot decide; the number of steps taken."""
+    @property
+    def orphans(self) -> list[Step]:
+        """The earlier decisions not taken again whose key no candidate has now: what changed made them moot."""
+        keys = {self._key_of(candidate) for candidate in self._candidates}
+        return [step for key, step in self._earlier.items() if key not in keys]
+
+    def run(self, policy: Policy | None = None) -> int:
+        """Steps over until the session is done, or neither an earlier decision nor the policy decides; the number of
+        steps taken."""
         taken = 0
         while not self.done and self.step_over(policy):
             taken += 1
@@ -377,8 +425,55 @@ Schemas.OfObject.Builder(StepSchema).properties(_list("steps", StepSchema)).upda
 
 Trace = Schemas.OfObject.Builder().name(TRACE).ref().properties(_list("steps", StepSchema)).create()
 """The schema of a trace: its steps in order, each its transform's name, its match (each symbol and its object, by its
-schema's name and position in the schema's extent, `Item#0`), its arguments by name, who decided it (`caller` or
-`policy`), and, for a composite, whether the caller stepped `in` or `over` it and its own steps."""
+path, `Shelf/items[0]`), its arguments by name, who decided it (`caller`, `policy` or `reused`), and, for a composite,
+whether the caller stepped `in` or `over` it and its own steps."""
+
+
+def steps(store: Any, trace: Any) -> list[Step]:
+    """The steps a `Transforms.Trace` object in `store` holds, as a session took them."""
+    plain = Plain.ToPlain(store)(Trace, trace)
+    return [_step(step) for step in plain["objects"][plain["root"]]["steps"]]  # type: ignore[index]  # written even if none
+
+
+def _step(plain: dict[str, Any]) -> Step:
+    arguments = tuple((a["name"], _value(a["value"])) for a in plain.get("arguments", []))
+    return Step(plain["transform"], tuple((b["symbol"], b["element"]) for b in plain["match"]), arguments, plain["by"],
+                plain.get("mode"), tuple(_step(inner) for inner in plain.get("steps", [])))
+
+
+def _value(plain: dict[str, Any]) -> Any:
+    ((token, value),) = plain.items()
+    return Schemas.OfNative.resolve(lambda t: t.token("basic", token)).from_plain(value)
+
+
+@dataclass(frozen=True)
+class Diff:
+    """What two traces decided differently, by key (a composite's own steps under its key, `Finish(i=...)/Label(i=...)`):
+    the steps only the later took, those only the earlier took, and, as pairs, those both took with other arguments."""
+
+    added: tuple[Step, ...]
+    removed: tuple[Step, ...]
+    changed: tuple[tuple[Step, Step], ...]
+
+
+def _flat(steps: Iterable[Step], prefix: str = "") -> Iterable[tuple[str, Step]]:
+    for step in steps:
+        yield prefix + step.key, step
+        yield from _flat(step.steps, f"{prefix}{step.key}/")
+
+
+def _same_arguments(a: Step, b: Step) -> bool:
+    return len(a.arguments) == len(b.arguments) and all(
+        x[0] == y[0] and _same(x[1], y[1]) for x, y in zip(a.arguments, b.arguments))
+
+
+def diff(earlier: Iterable[Step], later: Iterable[Step]) -> Diff:
+    """What `later` decided differently from `earlier`, in each one's order."""
+    before, after = dict(_flat(earlier)), dict(_flat(later))
+    return Diff(tuple(step for key, step in after.items() if key not in before),
+                tuple(step for key, step in before.items() if key not in after),
+                tuple((before[key], step) for key, step in after.items()
+                      if key in before and not _same_arguments(before[key], step)))
 
 
 def register(store: Any) -> Any:

@@ -113,9 +113,9 @@ session.trace(Transforms.register(traces))           # the steps as data, a Tran
   parameters) rank before all others, since what they decide shapes what follows; a policy may rank otherwise.
 - **Canonical order**: then, candidates are ordered by the transforms' order, then by their matches, by the labels of
   the elements bound in the symbols' order, then by their arguments in each domain's order. Nothing depends on hash
-  order, a clock or memory addresses. The core labels an element when the session first sees it, by its schema's name
-  and a number in the order of the schema's extent then (`Item#0`), and keeps the label for the session, since a
-  rewrite may reorder an extent; paths that survive a change of the model come with diff (plan step 3).
+  order, a clock or memory addresses. A session orders an element by when it first sees it (its place in its schema's
+  extent then) and names it by its path (mbse-schemas' `Paths`, 0.8), keeping both for the session, since a rewrite may
+  reorder an extent.
 - **`take(candidate)`** refuses a candidate that is not enabled, has an open parameter or is composite, applies its
   rewrite, checks that after now holds for the match (a rewrite that does not establish it is a bug in the transform,
   raised), records the step, and finds the candidates again.
@@ -249,7 +249,8 @@ they can become one of their own, mbse-transforms, depending on this one.
 2. **A first transform with both directions** (schemas are matched as objects through mbse-schemas' `Reflection`,
    0.8, which TRF-07 tests): mbse-schemas' `ToDataclass` and `FromDataclass` as one invertible
    transform (schemas to Python's `ast` and back), which tests undo and inversion on a small, known case.
-3. **Diff and reused decisions**: paths, keys, trace diffs, and reruns that reuse decisions and report orphans.
+3. **Diff and reused decisions** (built, 0.8): paths (mbse-schemas' `Paths`), keys, trace diffs, and reruns that
+   reuse decisions and report orphans. Source and explained target diffs wait on mbse-journals.
 4. **Incremental rebuild**: recorded reads, fingerprints and invalidation, tested against runs from scratch.
 5. **mbse-codegen-python**, then the other codegen repositories, each transform with its parameters documented, and
    the existing translators, transpilers and bridges rebuilt as transforms.

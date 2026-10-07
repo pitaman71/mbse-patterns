@@ -5,14 +5,14 @@ objects:
     - transform: Finish
       match:
       - symbol: i
-        element: 'Item#0'
+        element: 'Shelf/items[0]'
       by: caller
       mode: in
       steps:
       - transform: Label
         match:
         - symbol: i
-          element: 'Item#0'
+          element: 'Shelf/items[0]'
         arguments:
         - name: case
           value:
@@ -21,7 +21,7 @@ objects:
       - transform: Size
         match:
         - symbol: i
-          element: 'Item#0'
+          element: 'Shelf/items[0]'
         arguments:
         - name: size
           value:
@@ -30,14 +30,14 @@ objects:
     - transform: Finish
       match:
       - symbol: i
-        element: 'Item#1'
+        element: 'Shelf/items[1]'
       by: policy
       mode: over
       steps:
       - transform: Label
         match:
         - symbol: i
-          element: 'Item#1'
+          element: 'Shelf/items[1]'
         arguments:
         - name: case
           value:
@@ -46,7 +46,7 @@ objects:
       - transform: Size
         match:
         - symbol: i
-          element: 'Item#1'
+          element: 'Shelf/items[1]'
         arguments:
         - name: size
           value:
@@ -55,14 +55,14 @@ objects:
     - transform: Finish
       match:
       - symbol: i
-        element: 'Item#2'
+        element: 'Shelf/items[2]'
       by: policy
       mode: over
       steps:
       - transform: Label
         match:
         - symbol: i
-          element: 'Item#2'
+          element: 'Shelf/items[2]'
         arguments:
         - name: case
           value:
@@ -71,7 +71,7 @@ objects:
       - transform: Size
         match:
         - symbol: i
-          element: 'Item#2'
+          element: 'Shelf/items[2]'
         arguments:
         - name: size
           value:

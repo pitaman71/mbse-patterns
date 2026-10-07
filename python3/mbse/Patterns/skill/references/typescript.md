@@ -122,6 +122,7 @@ check(people.every((x) => x.name === "Cy" ? x.age >= 18n && x.age <= 64n : x.age
   rename a parameter that shadows an outer name, so TypeScript does not read the names.
 - A transform's options are an object, `new Transforms.Transform("Label", before, after, { parameters, rewrite })`, an
   answer is a record, `candidate.answer({ size: 3n })`, and a clause's arguments are a record, `new
-  Transforms.Clause("Label", { case: "upper" }, 2)`; a candidate's match and arguments are records.
+  Transforms.Clause("Label", { case: "upper" }, 2)`; a candidate's match and arguments are records. A rerun's earlier
+  steps come last, by position: `new Transforms.Session(store, transforms, {}, null, earlier)`.
 - `select(predicate, variables, unknown)` takes `unknown` by position (`null` for no variables), and returns a
   generator: `next()` gives `{ value, done }`.

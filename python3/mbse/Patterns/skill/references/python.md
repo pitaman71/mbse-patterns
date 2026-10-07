@@ -132,6 +132,9 @@ session = Transforms.Session(store, [Label, Size])          # enabled: before ho
 session.candidates(policy); session.take(c.answer(size=3))  # the caller decides, one step at a time; step_in(c) too
 session.run(Transforms.Policy(Transforms.Clause("Label", {"case": "upper"}, 2.0)))  # or step_over: the policy decides
 session.trace(Transforms.register(store))                   # the steps as data, a Transforms.Trace
+Transforms.steps(store, trace)                              # read back; step.key == "Label(i=Shelf/items[0])"
+again = Transforms.Session(store, [Label, Size], earlier=session.steps)  # reuses decisions by key
+again.run(); again.orphans; Transforms.diff(session.steps, again.steps)  # run() alone takes only reused ones
 ```
 
 ## Traps

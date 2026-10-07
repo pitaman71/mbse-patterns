@@ -13,10 +13,10 @@
  * domain is finite (a `bool`, or a union of options: branches that are value objects with no properties, whose values
  * are the branches' names), one candidate per combination; a parameter of any other domain stays open until answered
  * (`candidate.answer({ name: value })`). Candidates are ordered: those of transforms with parameters first, then by the
- * transforms' order, then by their matches (each object by its label), then by their values' order in their domains.
- * A session labels each object when it first sees it, by its schema's name and a number, in the order of the schema's
- * extent then (`Item#0`, `Item#1`), and keeps the label for the session, since a rewrite may reorder an extent; a
- * composite's session shares its parent's labels.
+ * transforms' order, then by their matches (each object in the order the session first saw it), then by their
+ * values' order in their domains. A session names each object by its path when it first sees it (mbse-schemas'
+ * `Paths`: `Shelf/items[0]`, or a schema's name), and keeps the name and the order for the session, since a rewrite may
+ * reorder an extent; a composite's session shares its parent's.
  *
  * `take(candidate)` takes one, as the caller decides; `step_in(candidate)` opens a composite's own session, scoped to
  * its match (its parts' matches agree with it on the symbols they share), whose steps the caller then takes; the
@@ -28,10 +28,17 @@
  * step, the candidates are found again, so taking one disables another that the step's rewrite made done.
  *
  * `session.trace(store)` writes the steps taken as data, a `Transforms.Trace` object in a store that `register`
- * prepared, which JSON and YAML write byte-identically in both implementations.
+ * prepared, which JSON and YAML write byte-identically in both implementations; `steps(store, trace)` reads them back.
+ *
+ * A rerun reuses decisions. A step's `key` is its transform and its match's paths (`Label(i=Shelf/items[0])`); a
+ * session given `earlier` steps takes, before any policy, each candidate an earlier step with its key decided with the
+ * same arguments, recorded as `reused` (a composite's own steps are reused inside it), so `run()` without a policy
+ * takes only those. `orphans` are the earlier decisions not taken again whose key no candidate has. `diff(earlier,
+ * later)` gives the steps added, removed and changed (the same key, other arguments), a composite's own steps under its
+ * key.
  */
 
-import { Plain, Schemas } from "@mbse/schemas/Framework";
+import { Paths, Plain, Schemas } from "@mbse/schemas/Framework";
 import { ValueError } from "@mbse/schemas/Framework/Errors";
 import type { PlainData, PlainMap } from "@mbse/schemas/Framework/Plain";
 import { repr } from "@mbse/schemas/Framework/Repr";
@@ -178,7 +185,7 @@ export class Policy {
   }
 }
 
-/** A step taken: its transform's name, its match by labels, its arguments, who decided it, and a composite's mode and
+/** A step taken: its transform's name, its match by paths, its arguments, who decided it, and a composite's mode and
  * own steps. */
 export class Step {
   readonly arguments: readonly [string, unknown][];
@@ -187,19 +194,27 @@ export class Step {
     readonly by: string, readonly mode: string | null = null, readonly steps: readonly Step[] = []) {
     this.arguments = args;
   }
+
+  /** The choice it decided: its transform and its match, `Dataclass(s=Contact)`. */
+  get key(): string {
+    return `${this.transform}(${this.match.map(([symbol, path]) => `${symbol}=${path}`).join(", ")})`;
+  }
 }
 
-/** Each object's label, given when a session first sees it: its schema's name and a number, in extent order. */
+/** Each object's path and place, given when a session first sees it: its path in the store (mbse-schemas' `Paths`), and
+ * a number in the order of its schema's extent then, which orders matches. */
 class Labels {
   readonly #labels = new Map<unknown, [string, number]>();
   readonly #counts = new Map<string, number>();
 
   see(store: any, names: Iterable<string>): void {
+    let paths: Paths.Paths | null = null;
     for (const name of names) {
       for (const value of store.extent(name) as Visitable[]) {
         if (this.#labels.has(value.identity())) continue;
+        paths ??= Paths.of(store);
         const count = this.#counts.get(name) ?? 0;
-        this.#labels.set(value.identity(), [name, count]);
+        this.#labels.set(value.identity(), [paths.of(value), count]);
         this.#counts.set(name, count + 1);
       }
     }
@@ -217,25 +232,25 @@ export class Session {
   undecided: string[] = [];
   readonly #scope: Match;
   readonly #labels: Labels;
+  readonly #earlier: Map<string, Step>;
   #child: { candidate: Candidate; session: Session; mode: string; by: string; paths: [string, string][] } | null = null;
   #candidates: Candidate[];
 
-  constructor(readonly store: any, transforms: Iterable<Transform>, scope: Match = {}, labels: Labels | null = null) {
+  constructor(readonly store: any, transforms: Iterable<Transform>, scope: Match = {}, labels: Labels | null = null,
+    earlier: Iterable<Step> = []) {
     this.transforms = [...transforms];
     const problems = this.transforms.flatMap((transform) => transform.check());
     if (problems.length > 0) throw new ValueError(problems.join("; "));
     this.#scope = { ...scope };
     this.#labels = labels ?? new Labels();
+    this.#earlier = new Map([...earlier].map((step) => [step.key, step]));
     this.#candidates = this.enabled();
   }
 
   // --- Matches and candidates ---
 
   private paths(match: Match): [string, string][] {
-    return Object.entries(match).map(([symbol, value]) => {
-      const [name, n] = this.#labels.of(value);
-      return [symbol, `${name}#${n}`];
-    });
+    return Object.entries(match).map(([symbol, value]) => [symbol, this.#labels.of(value)[0]]);
   }
 
   private enabled(): Candidate[] {
@@ -298,7 +313,9 @@ export class Session {
       throw new ValueError(`${repr(candidate.transform.name)} did not establish its after at ${where}`);
     }
     const args = [...candidate.transform.parameters.keys()].map((name) => [name, candidate.arguments[name]] as [string, unknown]);
-    this.steps.push(new Step(candidate.transform.name, paths, args, by, mode, steps));
+    const step = new Step(candidate.transform.name, paths, args, by, mode, steps);
+    this.#earlier.delete(step.key); // decided now, whoever decided it
+    this.steps.push(step);
     this.#candidates = this.enabled();
   }
 
@@ -327,33 +344,69 @@ export class Session {
     if (candidate.transform.parts.length === 0) throw new TypeError(`${repr(candidate.transform.name)} is not composite: take it`);
     if (candidate.open.length > 0) throw new ValueError(`${repr(candidate.transform.name)} has open parameters ${repr(candidate.open)}`);
     this.find(candidate);
-    const session = new Session(this.store, candidate.transform.parts, { ...this.#scope, ...candidate.match }, this.#labels);
+    const earlier = this.#earlier.get(this.keyOf(candidate));
+    const session = new Session(this.store, candidate.transform.parts, { ...this.#scope, ...candidate.match }, this.#labels,
+      earlier !== undefined ? earlier.steps : []);
     this.#child = { candidate, session, mode, by, paths: this.paths(candidate.match) };
     return session;
   }
 
-  /** Takes the candidate the policy ranks first, a composite as a whole, and says whether it took a step. Inside a
-   * composite the caller stepped into, it steps there. It takes nothing where no clause weighs the first candidate, or
-   * the policy cannot answer its open parameters, or a composite's own session stops. */
-  step_over(policy: Policy): boolean {
+  private keyOf(candidate: Candidate): string {
+    return new Step(candidate.transform.name, this.paths(candidate.match), [], "").key;
+  }
+
+  /** The first candidate, in order, that an earlier decision with its key decided, its open parameters answered as
+   * then. */
+  private reusable(): Candidate | null {
+    for (const candidate of this.#candidates) {
+      const earlier = this.#earlier.get(this.keyOf(candidate));
+      if (earlier === undefined) continue;
+      const values = new Map(earlier.arguments);
+      if (Object.entries(candidate.arguments).every(([name, value]) => values.has(name) && same(values.get(name), value))
+        && candidate.open.every((name) => values.has(name))) {
+        return candidate.open.length > 0
+          ? candidate.answer(Object.fromEntries(candidate.open.map((name) => [name, values.get(name)]))) : candidate;
+      }
+    }
+    return null;
+  }
+
+  /** Takes one step, as decided before or by the policy, and says whether it took one: the first candidate an earlier
+   * decision decides (see `earlier`), else the candidate the policy ranks first; a composite as a whole. Inside a
+   * composite the caller stepped into, it steps there. It takes nothing where no earlier decision applies and there is
+   * no policy, no clause weighs the first candidate, or the policy cannot answer its open parameters, or a composite's
+   * own session stops. */
+  step_over(policy: Policy | null = null): boolean {
     if (this.#child !== null && !this.#child.session.done) return this.#child.session.step_over(policy);
-    const ranked = this.candidates(policy);
-    if (ranked.length === 0 || (ranked[0] as Candidate).score <= 0) return false;
-    let candidate = ranked[0] as Candidate;
-    if (candidate.open.length > 0) candidate = candidate.answer(policy.answers(candidate));
-    if (candidate.open.length > 0) return false;
+    this.closed();
+    let candidate = this.reusable();
+    let by = "reused";
+    if (candidate === null) {
+      const ranked = policy !== null ? this.candidates(policy) : [];
+      if (ranked.length === 0 || (ranked[0] as Candidate).score <= 0) return false;
+      [candidate, by] = [ranked[0] as Candidate, "policy"];
+      if (candidate.open.length > 0) candidate = candidate.answer((policy as Policy).answers(candidate));
+      if (candidate.open.length > 0) return false;
+    }
     if (candidate.transform.parts.length === 0) {
-      this.apply(candidate, "policy");
+      this.apply(candidate, by);
       return true;
     }
-    const session = this.open(candidate, "over", "policy");
+    const session = this.open(candidate, "over", by);
     session.run(policy);
     if (session.done) this.closed();
     return true;
   }
 
-  /** Steps over until the session is done or the policy cannot decide; the number of steps taken. */
-  run(policy: Policy): number {
+  /** The earlier decisions not taken again whose key no candidate has now: what changed made them moot. */
+  get orphans(): Step[] {
+    const keys = new Set(this.#candidates.map((candidate) => this.keyOf(candidate)));
+    return [...this.#earlier].filter(([key]) => !keys.has(key)).map(([, step]) => step);
+  }
+
+  /** Steps over until the session is done, or neither an earlier decision nor the policy decides; the number of steps
+   * taken. */
+  run(policy: Policy | null = null): number {
     let taken = 0;
     while (!this.done && this.step_over(policy)) taken += 1;
     return taken;
@@ -412,9 +465,57 @@ const StepSchema = new Schemas.OfObject.Builder().properties(
 new Schemas.OfObject.Builder(StepSchema).properties(list("steps", StepSchema)).update();
 
 /** The schema of a trace: its steps in order, each its transform's name, its match (each symbol and its object, by its
- * label, `Item#0`), its arguments by name, who decided it (`caller` or `policy`), and, for a composite, whether the
- * caller stepped `in` or `over` it and its own steps. */
+ * path, `Shelf/items[0]`), its arguments by name, who decided it (`caller`, `policy` or `reused`), and, for a composite,
+ * whether the caller stepped `in` or `over` it and its own steps. */
 export const Trace = new Schemas.OfObject.Builder().name(TRACE).ref().properties(list("steps", StepSchema)).create();
+
+/** The steps a `Transforms.Trace` object in `store` holds, as a session took them. */
+export function steps(store: any, trace: unknown): Step[] {
+  const written = Plain.ToPlain(store)(Trace, trace as never) as PlainMap;
+  const root = (written.get("objects") as PlainMap).get(written.get("root") as string) as PlainMap;
+  return (root.get("steps") as PlainMap[]).map(stepOf); // written even when there are none
+}
+
+function stepOf(plain: PlainMap): Step {
+  const args = ((plain.get("arguments") as PlainMap[] | undefined) ?? []).map(
+    (a) => [a.get("name") as string, valueOf(a.get("value") as PlainMap)] as [string, unknown]);
+  return new Step(plain.get("transform") as string, (plain.get("match") as PlainMap[]).map(
+    (b) => [b.get("symbol") as string, b.get("element") as string] as [string, string]), args, plain.get("by") as string,
+    (plain.get("mode") as string | undefined) ?? null, ((plain.get("steps") as PlainMap[] | undefined) ?? []).map(stepOf));
+}
+
+function valueOf(plain: PlainMap): unknown {
+  const [[token, value]] = [...plain] as [[string, PlainData]];
+  return Schemas.OfNative.resolve((t) => t.token("basic", token)).from_plain(value);
+}
+
+/** What two traces decided differently, by key (a composite's own steps under its key, `Finish(i=...)/Label(i=...)`):
+ * the steps only the later took, those only the earlier took, and, as pairs, those both took with other arguments. */
+export class Diff {
+  constructor(readonly added: readonly Step[], readonly removed: readonly Step[], readonly changed: readonly [Step, Step][]) {}
+}
+
+function* flat(steps: Iterable<Step>, prefix = ""): Generator<[string, Step]> {
+  for (const step of steps) {
+    yield [prefix + step.key, step];
+    yield* flat(step.steps, `${prefix}${step.key}/`);
+  }
+}
+
+function sameArguments(a: Step, b: Step): boolean {
+  return a.arguments.length === b.arguments.length
+    && a.arguments.every(([name, value], i) => name === (b.arguments[i] as [string, unknown])[0] && same(value, (b.arguments[i] as [string, unknown])[1]));
+}
+
+/** What `later` decided differently from `earlier`, in each one's order. */
+export function diff(earlier: Iterable<Step>, later: Iterable<Step>): Diff {
+  const before = new Map(flat(earlier));
+  const after = new Map(flat(later));
+  return new Diff([...after].filter(([key]) => !before.has(key)).map(([, step]) => step),
+    [...before].filter(([key]) => !after.has(key)).map(([, step]) => step),
+    [...after].filter(([key, step]) => before.has(key) && !sameArguments(before.get(key) as Step, step))
+      .map(([key, step]) => [before.get(key) as Step, step]));
+}
 
 /** Registers the trace's schema in `store`, unless it holds it already; returns the store. */
 export function register<S extends { names(): Iterable<string>; register(schema: unknown): void }>(store: S): S {

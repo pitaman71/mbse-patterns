@@ -8,7 +8,7 @@
           "match": [
             {
               "symbol": "i",
-              "element": "Item#0"
+              "element": "Shelf/items[0]"
             }
           ],
           "by": "caller",
@@ -19,7 +19,7 @@
               "match": [
                 {
                   "symbol": "i",
-                  "element": "Item#0"
+                  "element": "Shelf/items[0]"
                 }
               ],
               "arguments": [
@@ -37,7 +37,7 @@
               "match": [
                 {
                   "symbol": "i",
-                  "element": "Item#0"
+                  "element": "Shelf/items[0]"
                 }
               ],
               "arguments": [
@@ -57,7 +57,7 @@
           "match": [
             {
               "symbol": "i",
-              "element": "Item#1"
+              "element": "Shelf/items[1]"
             }
           ],
           "by": "policy",
@@ -68,7 +68,7 @@
               "match": [
                 {
                   "symbol": "i",
-                  "element": "Item#1"
+                  "element": "Shelf/items[1]"
                 }
               ],
               "arguments": [
@@ -86,7 +86,7 @@
               "match": [
                 {
                   "symbol": "i",
-                  "element": "Item#1"
+                  "element": "Shelf/items[1]"
                 }
               ],
               "arguments": [
@@ -106,7 +106,7 @@
           "match": [
             {
               "symbol": "i",
-              "element": "Item#2"
+              "element": "Shelf/items[2]"
             }
           ],
           "by": "policy",
@@ -117,7 +117,7 @@
               "match": [
                 {
                   "symbol": "i",
-                  "element": "Item#2"
+                  "element": "Shelf/items[2]"
                 }
               ],
               "arguments": [
@@ -135,7 +135,7 @@
               "match": [
                 {
                   "symbol": "i",
-                  "element": "Item#2"
+                  "element": "Shelf/items[2]"
                 }
               ],
               "arguments": [

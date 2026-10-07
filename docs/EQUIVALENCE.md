@@ -27,6 +27,7 @@ language. Any other difference is a bug.
 | YAML | `description: 18 or older` | `description: '18 or older'` | mbse-schemas' YAML writers quote differently; both read back the same, and JSON is byte-identical | CONF-02, CONF-03 |
 | The predicate algebra's evaluator | `Predicates.Evaluator(store)(constraint, variables)`, a callable | `new Predicates.Evaluator(store).run(constraint, variables)` | no callable instances | ALG-02 |
 | A transform | `Transform(name, before, after, parameters, rewrite, parts)`, positionally or by keyword | `new Transform(name, before, after, { parameters, rewrite, parts })` | no keyword arguments | TRF-01 |
+| A rerun's earlier steps | `Session(store, transforms, earlier=steps)` | `new Session(store, transforms, {}, null, steps)`, after the scope and labels | no keyword arguments | TRF-08 |
 | A candidate's match and arguments, an answer, a clause's arguments | dicts; `candidate.answer(size=3)`; `Clause("Label", {"case": "upper"}, 2.0)` | records; `candidate.answer({ size: 3n })`; `new Clause("Label", { case: "upper" }, 2)` | as a query's variables and results | TRF-02, TRF-04 |
 | Weights | floats; an `int` weight is refused by `Sampling.weighted` | numbers, all floats | TypeScript has one number type | GEN-01 |
 | Random words and bounds | `int`s | `bigint`s (`next_u32()`, `below(random, 6n)`, `PCG32(42n)`) | as mbse-schemas' `Stores.Random` | GEN-01 |

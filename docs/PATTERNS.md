@@ -21,7 +21,8 @@ It is planned in releases, each landed and reviewed before the next:
 | 0.5 | The constraints vocabulary: a predicate's constraint is what it `requires` | built |
 | 0.6 | [Parameters](#parameters-and-application) as mbse-schemas' `OfParameter`; applications give them in order or by name, some or all | built |
 | 0.7 | [Transforms](#transforms), the core: rewrites applied step by step, one decision per step, kept as a trace ([design](TRANSFORMS.md)) | built |
-| 0.8 | [Characterizers](#characterizers), which fit distributions from streams of data | designed |
+| 0.8 | [Transforms](#transforms) rerun: steps keyed by paths, earlier decisions reused, orphans reported, traces diffed | built |
+| 0.9 | [Characterizers](#characterizers), which fit distributions from streams of data | designed |
 
 ```
 python3/mbse/Patterns/, typescript5/src/
@@ -302,7 +303,8 @@ rebuild, reversibility, pipelines).
   before holds and after does not, one per value of each finite domain (a `bool`, or a union of options, branches that
   are empty value objects, valued by their names), a parameter of any other domain left open. A match whose before or
   after is unknown is `undecided`. Candidates of transforms with parameters come first, then by transform, by match
-  (each element by the label the session gave it when first seen, `Item#0`) and by value.
+  (each element in the order the session first saw it) and by value. A match names each element by its path
+  (mbse-schemas' `Paths`: `Shelf/items[0]`, or a schema's name), kept for the session.
 - **One step per decision**: `take(candidate)` (the caller's), `step_in(candidate)` (a composite's session, scoped to
   its match), `step_over(policy)` (the policy's first candidate, a composite as a whole) and `run(policy)`. A step must
   establish its after. Resolution is linear: the candidates are found again after every step.
@@ -313,7 +315,14 @@ rebuild, reversibility, pipelines).
   the predicate says which match, reading what a schema holds as values (`s.get("properties")`) and comparing them
   deeply, and a rewrite changes a schema in place.
 - **The trace** is data: `session.trace(Transforms.register(store))` builds a `Transforms.Trace`, its steps in order,
-  each its transform, match, arguments, who decided it, and a composite's mode (`in`, `over`) and own steps.
+  each its transform, match, arguments, who decided it, and a composite's mode (`in`, `over`) and own steps;
+  `Transforms.steps(store, trace)` reads them back.
+- **Reruns reuse decisions** (0.8). A step's key is its transform and its match's paths (`Label(i=Shelf/items[0])`).
+  `Session(store, transforms, earlier=steps)` takes, before any policy, each candidate an earlier step with its key
+  decided, with the same arguments, as `reused` (a composite's own steps too); `run()` without a policy takes only
+  those, leaving the rest to the caller. `session.orphans` are the earlier decisions not taken again whose key no
+  candidate has. `Transforms.diff(earlier, later)` gives the steps added, removed, and changed (same key, other
+  arguments), a composite's own steps under its key.
 
 ## Characterizers
 

@@ -81,7 +81,9 @@ Why the mbse repositories exist, and this one's part: [MBSE.md](https://github.c
 10. **A transform rewrites where its before holds and its after does not.** `Transforms.Session(store, transforms)`
    offers the enabled candidates, one per value of each finite parameter domain; each step is one decision, the caller's
    (`take`, `step_in`) or a policy's (`step_over`, `run`), and the steps are kept as a trace. A policy only ranks
-   candidates; a rewrite must establish its after.
+   candidates; a rewrite must establish its after. A rerun given the earlier steps (`earlier=`) reuses each decision
+   whose key (transform and match paths) still occurs, reports the rest as `orphans`, and `Transforms.diff` compares
+   two traces.
 11. **In TypeScript, integers are `bigint`s** (`18n`), constraints are written with writers (there is no
    `FromFunction`, and `Contains` calls its condition with a variable: `(e) => e.phone.eq(p)`), a predicate is applied
    with `.call(...)`, and a validator's options are an object (`{ unknown: "ignore" }`).
