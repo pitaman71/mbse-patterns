@@ -308,6 +308,9 @@ rebuild, reversibility, pipelines).
   establish its after. Resolution is linear: the candidates are found again after every step.
 - **A policy only ranks**: `Policy(Clause("Label", {"case": "lower"}, weight), ...)` weighs the candidates of one
   transform with those arguments, and answers open parameters; a candidate no clause weighs is not the policy's to take.
+- **Schemas are matched as objects** in a store of schemas (mbse-schemas' `Reflection.store(schemas)`), whose objects
+  are the schemas themselves: a symbol of `Reflection.META[Schemas.OfObject.Data]` binds an object schema, and a rewrite
+  changes it in place.
 - **The trace** is data: `session.trace(Transforms.register(store))` builds a `Transforms.Trace`, its steps in order,
   each its transform, match, arguments, who decided it, and a composite's mode (`in`, `over`) and own steps.
 
