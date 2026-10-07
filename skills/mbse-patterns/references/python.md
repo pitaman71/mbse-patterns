@@ -127,6 +127,11 @@ Distributions.Categorical.Builder().symbol(s).option(3, "x").option(1, "y")   # 
 Predicates.Evaluator(store).weigh(constraint, match)              # the weight of the arms a match falls under, or 0.0
 Generators.Sample(store, predicate, Stores.PCG32(seed))     # the store's matches, drawn by weight
 Generators.Generate(store, predicate, Stores.PCG32(seed))   # new matches: arms by weight, values drawn, equalities set
+Transforms.Transform("Label", before, after, [case_spec], rewrite)   # or parts=[...]: a composite
+session = Transforms.Session(store, [Label, Size])          # enabled: before holds, after not; finite domains expand
+session.candidates(policy); session.take(c.answer(size=3))  # the caller decides, one step at a time; step_in(c) too
+session.run(Transforms.Policy(Transforms.Clause("Label", {"case": "upper"}, 2.0)))  # or step_over: the policy decides
+session.trace(Transforms.register(store))                   # the steps as data, a Transforms.Trace
 ```
 
 ## Traps

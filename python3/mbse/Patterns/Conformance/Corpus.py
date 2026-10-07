@@ -9,10 +9,10 @@ same order of statements.
 from __future__ import annotations
 
 from mbse.Expressions import Expressions as E
-from mbse.Patterns import Constraints as C, Distributions as D, Generators as G, Predicates as P
+from mbse.Patterns import Constraints as C, Distributions as D, Generators as G, Predicates as P, Transforms as T
 from mbse.Schemas.Framework import Proxies, Schemas as S, Stores
 
-CASES = ["predicates", "empty", "algebra", "weights", "generated", "drawn"]
+CASES = ["predicates", "empty", "algebra", "weights", "generated", "drawn", "traced"]
 
 
 def build():
@@ -106,6 +106,37 @@ def build():
         contact = next(people)["person"]
         drawn.Directory(listing).contacts(lambda e, contact=contact: e.contact(contact)).update()
 
+    # --- traced: three items on a shelf, labelled and sized by a composite transform, the first stepped into and decided
+    #     by the caller, the others stepped over by a policy ---
+    Held = S.OfRelation.Builder().name("Held").links("shelf", "item").create()
+    Shelf = S.OfObject.Builder().name("Shelf").ref().singleton("Shelf").relations(
+        lambda r: r.name("items").of(Held).me("shelf")).create()
+    Item = S.OfObject.Builder().name("Item").ref().properties(
+        text("name"), text("label"), lambda p: p.name("size").of(lambda t: t.as_native(int))).relations(
+        lambda r: r.name("shelves").of(Held).me("item")).create()
+    shelf = Proxies.OfStore()
+    for schema in (Shelf, Item, Held):
+        shelf.register(schema)
+    for name in ("bolt", "nut", "washer"):
+        item = shelf.Item().name(name).create()
+        shelf.Shelf(shelf.singleton("Shelf")).items(lambda e, item=item: e.item(item)).update()
+    i = E.variable("i")
+    over = lambda constraint: P.OfPredicate.Builder().symbols({"i": Item}).requires(constraint).create()  # noqa: E731
+    Option = S.OfObject.Builder().create()
+    Case = S.OfUnion.Builder().branches(lambda b: b.name("upper").of(Option), lambda b: b.name("lower").of(Option)).create()
+    Label = T.Transform("Label", over(i.has("name")), over(i.has("label")), [lambda p: p.name("case").of(Case)],
+                        lambda s, m, a: s.Item(m["i"]).label(m["i"].name.upper() if a["case"] == "upper" else m["i"].name).update())
+    Size = T.Transform("Size", over(i.has("label")), over(i.has("size")),
+                       [lambda p: p.name("size").of(lambda t: t.as_native(int))], lambda s, m, a: s.Item(m["i"]).size(a["size"]).update())
+    Finish = T.Transform("Finish", over(i.has("name")), over(i.has("label").and_(i.has("size"))), parts=[Label, Size])
+    session = T.Session(shelf, [Finish])
+    inner = session.step_in(session.candidates()[0])
+    inner.take(inner.candidates()[1])
+    inner.take(inner.candidates()[0].answer(size=7))
+    session.run(T.Policy(T.Clause("Finish"), T.Clause("Label", {"case": "upper"}), T.Clause("Size", {"size": 2})))
+    traces = T.register(Proxies.OfStore())
+    trace = session.trace(traces)
+
     return {
         "predicates": (C.OfSet.Schema, predicates, store),
         "empty": (C.OfSet.Schema, empty, store),
@@ -113,4 +144,5 @@ def build():
         "weights": (P.OfPredicate.Schema, weights, store),
         "generated": (Directory, directory, book),
         "drawn": (Directory, listing, drawn),
+        "traced": (T.Trace, trace, traces),
     }

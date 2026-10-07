@@ -16,6 +16,8 @@ only what differs. The deliberate differences between the implementations are in
   CON-07 applies predicates with `.call(...)`, parameters by name as a last object literal.
 - GEN-01 refuses an infinite weight, as Python does, and has no `int` weight to refuse; random words and bounds are
   `bigint`s.
+- TRF-01 gives a transform's options as an object, and TRF-02 to TRF-06 give answers and a clause's arguments as
+  records; their integers are `bigint`s.
 - DST-03 refuses a function in a distribution's `.requires(...)` before its symbol is set, since TypeScript calls the
   function with the symbol's variable; Python reads the function's parameters instead.
 

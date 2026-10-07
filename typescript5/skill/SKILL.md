@@ -1,6 +1,6 @@
 ---
 name: mbse-patterns
-description: Write predicates (named constraints over symbols bound to mbse-schemas objects, such as "every adult contact has a phone" or "a contact's phone has a number") as data beside the schemas, validate data against them with three-valued results, and query a store for their matches, lazily and planned from the constraint's shape, in Python or TypeScript. Use when an interface or model has constraints its data must satisfy (MBSE/SysML constraints, interface control documents, data-quality constraints, what others call business rules), when selecting objects of an mbse-schemas store by a condition, possibly relating several objects, when weighting a population by predicates and drawing samples or generating reproducible pseudorandom test data from it, or when writing code that imports mbse.Patterns or @mbse/patterns.
+description: Write predicates (named constraints over symbols bound to mbse-schemas objects, such as "every adult contact has a phone" or "a contact's phone has a number") as data beside the schemas, validate data against them with three-valued results, and query a store for their matches, lazily and planned from the constraint's shape, in Python or TypeScript. Use when an interface or model has constraints its data must satisfy (MBSE/SysML constraints, interface control documents, data-quality constraints, what others call business rules), when selecting objects of an mbse-schemas store by a condition, possibly relating several objects, when weighting a population by predicates and drawing samples or generating reproducible pseudorandom test data from it, when applying rewrites to a store's data step by step with every decision recorded (transforms, the basis of code generation with people and agents in the loop), or when writing code that imports mbse.Patterns or @mbse/patterns.
 ---
 
 # mbse-patterns
@@ -78,7 +78,11 @@ Why the mbse repositories exist, and this one's part: [MBSE.md](https://github.c
    arm that holds. A distribution of values (`Distributions.Normal.Builder().symbol("age")...requires(lambda person,
    age: person.age == age)`) binds a symbol to a drawn value that its body's equalities set. `Generators.Generate` and
    `Generators.Sample` draw from such a predicate with a random source (`Stores.PCG32(seed)`).
-10. **In TypeScript, integers are `bigint`s** (`18n`), constraints are written with writers (there is no
+10. **A transform rewrites where its before holds and its after does not.** `Transforms.Session(store, transforms)`
+   offers the enabled candidates, one per value of each finite parameter domain; each step is one decision, the caller's
+   (`take`, `step_in`) or a policy's (`step_over`, `run`), and the steps are kept as a trace. A policy only ranks
+   candidates; a rewrite must establish its after.
+11. **In TypeScript, integers are `bigint`s** (`18n`), constraints are written with writers (there is no
    `FromFunction`, and `Contains` calls its condition with a variable: `(e) => e.phone.eq(p)`), a predicate is applied
    with `.call(...)`, and a validator's options are an object (`{ unknown: "ignore" }`).
 

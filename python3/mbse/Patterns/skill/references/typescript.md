@@ -120,5 +120,8 @@ check(people.every((x) => x.name === "Cy" ? x.age >= 18n && x.age <= 64n : x.age
 - A distribution's `.requires(...)` calls a function with the variable of its own symbol, `(age) => person.age.eq(age)`,
   outer names coming from the closure, where Python reads `lambda person, age: person.age == age`; a bundler may
   rename a parameter that shadows an outer name, so TypeScript does not read the names.
+- A transform's options are an object, `new Transforms.Transform("Label", before, after, { parameters, rewrite })`, an
+  answer is a record, `candidate.answer({ size: 3n })`, and a clause's arguments are a record, `new
+  Transforms.Clause("Label", { case: "upper" }, 2)`; a candidate's match and arguments are records.
 - `select(predicate, variables, unknown)` takes `unknown` by position (`null` for no variables), and returns a
   generator: `next()` gives `{ value, done }`.

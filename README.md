@@ -65,7 +65,11 @@ Queries.select(store, IsAnAdult);
 A pattern is a predicate whose constraint weighs alternatives (`Distributions.Choices`) and draws values from
 distributions (uniform, normal, Poisson, geometric, categorical); a sampler draws a store's matches by weight, and a
 generator builds new data, redrawing until the predicate holds, byte-identical in both languages from a seed.
-Characterizers that fit distributions to data are designed ([the design](docs/PATTERNS.md)) for the next release.
+A transform rewrites a store's data where its `before` predicate holds and its `after` does not, and a session applies
+transforms one decision per step, each decision the caller's or, where the caller steps over, a policy's, and keeps the
+steps as a trace ([the transforms design](docs/TRANSFORMS.md)): the basis of generating code with people and agents in
+the loop. Characterizers that fit distributions to data are designed ([the design](docs/PATTERNS.md)) for the next
+release.
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
 (`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a constraint from

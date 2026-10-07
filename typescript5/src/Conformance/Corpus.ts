@@ -15,8 +15,9 @@ import * as C from "../Constraints.js";
 import * as D from "../Distributions.js";
 import * as G from "../Generators.js";
 import * as P from "../Predicates.js";
+import * as T from "../Transforms.js";
 
-export const CASES = ["predicates", "empty", "algebra", "weights", "generated", "drawn"];
+export const CASES = ["predicates", "empty", "algebra", "weights", "generated", "drawn", "traced"];
 
 export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Stores.Store]> {
   const text = (name: string) => (p: any) => p.name(name).of((t: any) => t.as_native(String));
@@ -105,6 +106,37 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
     drawn.Directory(listing).contacts((e: any) => e.contact(contact)).update();
   }
 
+  // --- traced: three items on a shelf, labelled and sized by a composite transform, the first stepped into and decided
+  //     by the caller, the others stepped over by a policy ---
+  const Held = new S.OfRelation.Builder().name("Held").links("shelf", "item").create();
+  const Shelf = new S.OfObject.Builder().name("Shelf").ref().singleton("Shelf").relations(
+    (r) => r.name("items").of(Held).me("shelf")).create();
+  const Item = new S.OfObject.Builder().name("Item").ref().properties(
+    text("name"), text("label"), (p) => p.name("size").of((t) => t.as_native(BigInt))).relations(
+    (r) => r.name("shelves").of(Held).me("item")).create();
+  const shelf: any = new Proxies.OfStore();
+  for (const schema of [Shelf, Item, Held]) shelf.register(schema);
+  for (const name of ["bolt", "nut", "washer"]) {
+    const item = shelf.Item().name(name).create();
+    shelf.Shelf(shelf.singleton("Shelf")).items((e: any) => e.item(item)).update();
+  }
+  const i = E.variable("i");
+  const over = (constraint: unknown) => new P.OfPredicate.Builder().symbols({ i: Item }).requires(constraint).create();
+  const Option = new S.OfObject.Builder().create();
+  const Case = new S.OfUnion.Builder().branches((b) => b.name("upper").of(Option), (b) => b.name("lower").of(Option)).create();
+  const Label = new T.Transform("Label", over(i.has("name")), over(i.has("label")), { parameters: [(p) => p.name("case").of(Case)],
+    rewrite: (s, m, a) => s.Item(m["i"]).label(a["case"] === "upper" ? (m["i"] as any).name.toUpperCase() : (m["i"] as any).name).update() });
+  const Size = new T.Transform("Size", over(i.has("label")), over(i.has("size")), {
+    parameters: [(p) => p.name("size").of((t) => t.as_native(BigInt))], rewrite: (s, m, a) => s.Item(m["i"]).size(a["size"]).update() });
+  const Finish = new T.Transform("Finish", over(i.has("name")), over(i.has("label").and_(i.has("size"))), { parts: [Label, Size] });
+  const session = new T.Session(shelf, [Finish]);
+  const inner = session.step_in(session.candidates()[0] as T.Candidate);
+  inner.take(inner.candidates()[1] as T.Candidate);
+  inner.take((inner.candidates()[0] as T.Candidate).answer({ size: 7n }));
+  session.run(new T.Policy(new T.Clause("Finish"), new T.Clause("Label", { case: "upper" }), new T.Clause("Size", { size: 2n })));
+  const traces = T.register(new Proxies.OfStore());
+  const trace = session.trace(traces) as Visitable;
+
   return new Map([
     ["predicates", [C.OfSet.Schema, predicates, store] as const],
     ["empty", [C.OfSet.Schema, empty, store] as const],
@@ -112,5 +144,6 @@ export function build(): Map<string, readonly [S.OfObject.Data, Visitable, Store
     ["weights", [P.OfPredicate.Schema, weights, store] as const],
     ["generated", [Directory, directory, book] as const],
     ["drawn", [Directory, listing, drawn] as const],
+    ["traced", [T.Trace, trace, traces] as const],
   ]);
 }

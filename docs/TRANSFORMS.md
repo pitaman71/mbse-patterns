@@ -3,9 +3,9 @@
 
 # Transforms
 
-Status: a draft for review; nothing is built. Transforms will be a module of this repository, `Transforms` (see Where
-it lives). Decisions it relies on are marked as such; everything else is a proposal, and what is undecided is under
-Open questions.
+Status: the core is built (0.7, plan step 1), as the module `Transforms` of this repository; the rest is a design for
+review. Decisions it relies on are marked as such, what the core does not do yet is said where it comes up, and what is
+undecided is under Open questions.
 
 ## Why
 
@@ -95,34 +95,43 @@ parameter). Documents and messages say "step parameter" or "model parameter" whe
 
 ## A session
 
-A session runs a transform over models bound to its symbols. Both implementations offer the same API; in Python:
+A session applies transforms to the data of a store. Both implementations offer the same API; in Python:
 
-```python
-session = Transforms.Session(transform, {"module": module})  # before is checked for the binding
-for candidate in session.candidates(policy):     # the enabled steps, ranked by the policy, then canonically
-    candidate.transform, candidate.match, candidate.arguments, candidate.open, candidate.rank
-session.take(candidate.answer(name="Point"))     # a step: one decision, from a person or an agent
-session.step_over(policy)                        # takes the policy's first candidate; stops where it cannot decide
-session.step_in(candidate)                       # a composite's own session, to decide its inner steps
-session.trace, session.undecided, session.done   # the record, what is unknown, whether the worklist is empty
+```python fragment
+session = Transforms.Session(store, [Finish, Tag])   # the transforms, in order
+for candidate in session.candidates(policy):         # the enabled steps, ranked by the policy, then in order
+    candidate.transform, candidate.match, candidate.arguments, candidate.open, candidate.score
+session.take(candidate.answer(size=3))               # a step: one decision, the caller's
+inner = session.step_in(candidate)                   # a composite's own session, scoped to its match
+session.step_over(policy)                            # one step, the policy's first candidate, a composite as a whole
+session.run(policy)                                  # steps over until done, or until the policy cannot decide
+session.steps, session.undecided, session.done       # what was taken, what is unknown, whether nothing is left
+session.trace(Transforms.register(traces))           # the steps as data, a Transforms.Trace object
 ```
 
 - **Parameter decisions first**: by default, candidates that decide a parameter's value (those of transforms with
   parameters) rank before all others, since what they decide shapes what follows; a policy may rank otherwise.
-- **Canonical order**: then, candidates are ordered by the transforms' declared order, then by their matches, by the
-  paths of the elements bound in the symbols' order, then by their arguments in each domain's order. Nothing depends on
-  hash order, a clock or memory addresses. A random choice, where a policy wants one, draws from a `Stores.PCG32` seeded
-  as the policy says, so it too is part of the run's inputs.
-- **`take(candidate)`** refuses a candidate that is not enabled or has an open parameter, applies its rewrite, records
-  the step and its decisions, and updates the worklist.
-- **`step_over(policy)`** takes the policy's first candidate, again and again, until the worklist is empty or the first
-  candidate has an open parameter the policy proposes no value for; then the caller decides. With a policy that decides
-  everything, a session is a batch generator; with none, every choice is the caller's.
-- **A transform is done** when its worklist is empty, and a session then checks the transform's own after. It is
-  **complete** when every element of the bound models that some transform could match has been rewritten, which a
-  session reports, so that an element no transform can rewrite is a finding ("nothing rewrites union `Reach`"), never
-  silently dropped. Today's transpilers' refusals ("a spread in an object literal is not supported") become exactly
-  that.
+- **Canonical order**: then, candidates are ordered by the transforms' order, then by their matches, by the labels of
+  the elements bound in the symbols' order, then by their arguments in each domain's order. Nothing depends on hash
+  order, a clock or memory addresses. The core labels an element when the session first sees it, by its schema's name
+  and a number in the order of the schema's extent then (`Item#0`), and keeps the label for the session, since a
+  rewrite may reorder an extent; paths that survive a change of the model come with diff (plan step 3).
+- **`take(candidate)`** refuses a candidate that is not enabled, has an open parameter or is composite, applies its
+  rewrite, checks that after now holds for the match (a rewrite that does not establish it is a bug in the transform,
+  raised), records the step, and finds the candidates again.
+- **`step_in(candidate)`** opens a composite's session over its parts, whose matches agree with the composite's on the
+  symbols they share; the caller takes its steps, and the composite's step is recorded, with them, once that session is
+  done. Until then the outer session refuses to go on.
+- **`step_over(policy)`** takes one step: the policy's first candidate, answering its open parameters from the policy,
+  and a composite as a whole, stepping over its own steps. It takes nothing where no clause weighs the first candidate
+  or the policy cannot answer an open parameter; then the caller decides. **`run(policy)`** steps over until the session
+  is done or the policy cannot decide. With a policy that decides everything, a session is a batch generator; with
+  none, every choice is the caller's.
+- **Policies, in the core**, are clauses that each weigh one transform's candidates with given arguments. Guards (a
+  predicate over the match) and distributions over a parameter's domain are designed above and not built yet.
+- **A session is done** when no candidate is left and no composite is open. Checking that every element some transform
+  could match has been rewritten (**completeness**: "nothing rewrites union `Reach`", where today's transpilers say "a
+  spread in an object literal is not supported") is designed, not built.
 
 ## Diff (optional)
 
@@ -197,14 +206,14 @@ Two levels, each a property a transform may have:
 Everything a session keeps is mbse-schemas data, in one store of the session, so that its relations link elements
 (stores are isolated, so the source is read into the session's store as a snapshot):
 
-- `Transforms.Step`: a value object, its transform's name, its match (each symbol and the path of its element), its
-  arguments (as an application's are written: `{"name", "value"}` or `{"name", "term"}`), where its decision came from
-  (`caller`, `policy` with the clause's position, `reused`), and, for a composite transform, whether the caller
-  stepped in or over and its inner steps, in a list.
+- A step: a value object, its transform's name, its match (each symbol and its element's label), its arguments (each
+  a native value, written as a form's attribute is: `{"name", "value": {"str": "upper"}}`), who decided it (`caller`
+  or `policy`; `reused` comes with incremental rebuild), and, for a composite transform, whether the caller stepped
+  `in` or `over` and its inner steps, in a list. The core writes these; the relations below come later.
 - Relations from a step to elements: `Matched(step, element)` and `Wrote(step, element)`, each with the element's path;
   and, where recorded, `Read(step, element)`, a fingerprint, and the step's effect as mutations.
-- `Transforms.Trace`: a reference object holding the steps in order, the transform's name and version, the bindings of
-  its symbols, and the policies it ran with.
+- `Transforms.Trace`: a reference object holding the steps in order (built); the transforms' names and versions and the
+  policies it ran with are to follow.
 - `Transforms.Policy`: clauses, each a transform, a guard (a predicate's name and arguments), preferences over
   arguments or a distribution over a parameter's domain, and a weight.
 
@@ -234,7 +243,7 @@ they can become one of their own, mbse-transforms, depending on this one.
 
 ## Plan
 
-1. **Core**: transforms (before, after, parameters, rewrite), matches by query, the worklist of enabled candidates,
+1. **Core** (built, 0.7): transforms (before, after, parameters, rewrite), matches by query, the worklist of enabled candidates,
    sessions (`take`, `step_over`, `step_in`, composites), policies that rank, and traces as data, in both languages,
    with the determinism test that two runs (and the two implementations) give byte-identical traces and results.
 2. **A first transform with both directions**: mbse-schemas' `ToDataclass` and `FromDataclass` as one invertible

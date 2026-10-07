@@ -1,0 +1,156 @@
+{
+  "root": "s0",
+  "objects": {
+    "s0": {
+      "steps": [
+        {
+          "transform": "Finish",
+          "match": [
+            {
+              "symbol": "i",
+              "element": "Item#0"
+            }
+          ],
+          "by": "caller",
+          "mode": "in",
+          "steps": [
+            {
+              "transform": "Label",
+              "match": [
+                {
+                  "symbol": "i",
+                  "element": "Item#0"
+                }
+              ],
+              "arguments": [
+                {
+                  "name": "case",
+                  "value": {
+                    "str": "lower"
+                  }
+                }
+              ],
+              "by": "caller"
+            },
+            {
+              "transform": "Size",
+              "match": [
+                {
+                  "symbol": "i",
+                  "element": "Item#0"
+                }
+              ],
+              "arguments": [
+                {
+                  "name": "size",
+                  "value": {
+                    "int": 7
+                  }
+                }
+              ],
+              "by": "caller"
+            }
+          ]
+        },
+        {
+          "transform": "Finish",
+          "match": [
+            {
+              "symbol": "i",
+              "element": "Item#1"
+            }
+          ],
+          "by": "policy",
+          "mode": "over",
+          "steps": [
+            {
+              "transform": "Label",
+              "match": [
+                {
+                  "symbol": "i",
+                  "element": "Item#1"
+                }
+              ],
+              "arguments": [
+                {
+                  "name": "case",
+                  "value": {
+                    "str": "upper"
+                  }
+                }
+              ],
+              "by": "policy"
+            },
+            {
+              "transform": "Size",
+              "match": [
+                {
+                  "symbol": "i",
+                  "element": "Item#1"
+                }
+              ],
+              "arguments": [
+                {
+                  "name": "size",
+                  "value": {
+                    "int": 2
+                  }
+                }
+              ],
+              "by": "policy"
+            }
+          ]
+        },
+        {
+          "transform": "Finish",
+          "match": [
+            {
+              "symbol": "i",
+              "element": "Item#2"
+            }
+          ],
+          "by": "policy",
+          "mode": "over",
+          "steps": [
+            {
+              "transform": "Label",
+              "match": [
+                {
+                  "symbol": "i",
+                  "element": "Item#2"
+                }
+              ],
+              "arguments": [
+                {
+                  "name": "case",
+                  "value": {
+                    "str": "upper"
+                  }
+                }
+              ],
+              "by": "policy"
+            },
+            {
+              "transform": "Size",
+              "match": [
+                {
+                  "symbol": "i",
+                  "element": "Item#2"
+                }
+              ],
+              "arguments": [
+                {
+                  "name": "size",
+                  "value": {
+                    "int": 2
+                  }
+                }
+              ],
+              "by": "policy"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
