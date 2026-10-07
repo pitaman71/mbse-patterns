@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mbse-patterns"
-version = "0.5.1"
+version = "0.5.2"
 description = "Constraints, queries and patterns over mbse-schemas data: constraints as constraints, validated and queried, and (later) populations to generate and characterize"
 keywords = ["constraints", "queries", "patterns", "validation", "mbse", "sysml", "interface", "test data"]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["mbse-schemas>=0.5.1,<0.6", "mbse-expressions>=0.3.0,<0.4"]
+dependencies = ["mbse-schemas>=0.5.1,<0.6", "mbse-expressions>=0.4.0,<0.5"]
 
 [project.optional-dependencies]
 yaml = ["mbse-schemas[yaml]>=0.5.1,<0.6"]
