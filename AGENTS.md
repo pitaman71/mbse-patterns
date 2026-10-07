@@ -28,7 +28,9 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
   a *term* (mbse-expressions), and of a program tree a *syntax node* (mbse-programs); never a bare "node" in code,
   docs or messages. What a specification requires is a *constraint*, never a "rule"; a constraint is checked,
   resolved or generated from, never executed ([MBSE.md, What a specification is made
-  of](MBSE.md#what-a-specification-is-made-of)).
+  of](MBSE.md#what-a-specification-is-made-of)). Across this many languages, terms collide (an SVA
+  `property`, a C++ template parameter, a SystemVerilog `constraint` block): wherever ours meets a language's own,
+  in docs and examples, qualify the colliding term with whose it is.
 - **The README opens with why.** Its first sentence or paragraph says, TL;DR style, why this repository exists, in
   the terms of `MBSE.md`; what it is comes after. Keep that opening true as the repository changes.
 - **Every human-facing document has navigation.** A `{previous, home, next}` line heads and ends each document in
