@@ -112,7 +112,8 @@ check(people.every((x) => x.name === "Cy" ? x.age >= 18n && x.age <= 64n : x.age
 - Builders are made with `new`: `new Predicates.OfPredicate.Builder()`; the algebra's evaluator is
   `new Predicates.Evaluator(store).run(constraint, variables)`.
 - A predicate is applied with `HasName.call(person, "alice")`, since an object is not callable; Python also calls it
-  directly, `HasName(person, "alice")`. A builder gives a name it has not declared as `undefined`, where Python raises
+  directly, `HasName(person, "alice")`. Parameters by name are a last object literal, `HasName.call(person, { name:
+  "alice" })`, where Python takes keyword arguments. A builder gives a name it has not declared as `undefined`, where Python raises
   `AttributeError`.
 - Seeds and random words are `bigint`s (`new Stores.PCG32(42n)`), and weights are numbers: there is no `int` weight
   to refuse.

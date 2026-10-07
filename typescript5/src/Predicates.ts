@@ -13,8 +13,8 @@
  *       .requires(E.variable("person").name.eq(E.variable("name")))
  *       .create();
  *
- * `.parameters(...)` takes property specs, as an object schema's `.properties(...)` does, each with a name and,
- * optionally, a type. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold;
+ * `.parameters(...)` takes parameter specs, as a schema's `.parameters(...)` does (mbse-schemas' `OfParameter`), each
+ * with a name and, optionally, a type and a description. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold;
  * its `requires` is their conjunction. A condition is any spec of the algebra: a term, or a writer. Its free names are
  * the symbols and parameters. A builder gives the variables it declares by name, so `pred.person` is the variable
  * `person` once `pred.symbols(APerson)` declares it. A predicate without symbols is a statement about the whole store;
@@ -22,9 +22,10 @@
  *
  * A predicate is a term of the algebra, `DIALECT`, which extends mbse-expressions' Basic: it binds its symbols and
  * parameters within `requires` (an import, in mbse-expressions' terms). Applying it, `HasName.call(pred.person,
- * "alice")`, is a term too, `OfApply`, which holds the predicate itself, by reference, and arguments for its symbols
- * and then its parameters, in order: it holds when the predicate's `requires` holds with them bound. A predicate used
- * in several places is one object, and is written once.
+ * "alice")` or `HasName.call(pred.person, { name: "alice" })`, is a term too, `OfApply`, which holds the predicate
+ * itself, by reference, arguments for its symbols, in order, and arguments for its parameters, in order or by name,
+ * some or all: it holds when the predicate's `requires` holds with them bound, a parameter given no argument unknown.
+ * A predicate used in several places is one object, and is written once.
  *
  * The algebra's other terms, each a data class with a builder, are built as a predicate is, from a spec (data, or a
  * callable taking the builder):
@@ -75,6 +76,13 @@ export class Symbols extends Map<string, any> {
   }
 }
 
+/** Parameter names, in order, compared by value, as Python's tuples are. */
+export class Names extends Array<string> {
+  equals(other: unknown): boolean {
+    return other instanceof Names && other.length === this.length && this.every((name, i) => name === other[i]);
+  }
+}
+
 function schemaName(schema: unknown): string {
   const name = typeof schema === "string" ? schema : (schema as { name?: unknown } | null)?.name;
   if (typeof name !== "string") throw new TypeError(`expected a named schema or its name, got ${repr(schema)}`);
@@ -82,6 +90,15 @@ function schemaName(schema: unknown): string {
 }
 
 /** The conditions' conjunction, left to right; null if there are none. */
+function count(n: number, noun: string): string {
+  return n === 1 ? `${n} ${noun}` : `${n} ${noun}s`;
+}
+
+/** Whether `value` is an object literal: named arguments, which no spec of the algebra is. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
+}
+
 function conjunction(conditions: unknown[]): Terms.Term | null {
   let constraint: Terms.Term | null = null;
   for (const condition of conditions) {
@@ -112,6 +129,11 @@ export function resolving<T>(store: Stores.Store, read: () => T): T {
   }
 }
 
+/** The schema an entry's `type` names, resolved in the innermost store being read with; null where it has none. */
+function typeOf(entry: PlainMap): unknown {
+  return entry.has("type") ? Modules.resolve(STORES[STORES.length - 1] as Stores.Store, entry.get("type") as PlainMap) : null;
+}
+
 function typed(name: string, schema: unknown): PlainMap {
   return new Map<string, unknown>(schema === null ? [["name", name]] : [["name", name], ["type", Modules.reference(schema as never)]]) as PlainMap;
 }
@@ -122,12 +144,26 @@ const LIST = new Schemas.OfIndexed.Builder().of(Schemas.OfProperty.Schema).creat
  * are not written. */
 export const SYMBOLS = new Terms.ValueProperty(LIST,
   (symbols) => (symbols as Symbols).size === 0 ? null : [...(symbols as Symbols)].map(([name, schema]) => typed(name, schema)),
-  (plain) => new Symbols((plain as PlainMap[]).map((entry) => [entry.get("name") as string,
-    entry.get("type") === undefined || entry.get("type") === null ? null
-      : Modules.resolve(STORES[STORES.length - 1] as Stores.Store, entry.get("type") as PlainMap)])));
+  (plain) => new Symbols((plain as PlainMap[]).map((entry) => [entry.get("name") as string, typeOf(entry)])));
 
-/** Parameters by name, each with its type, or null for a parameter of any type, written as symbols are. */
-export const PARAMETERS = SYMBOLS;
+function parameter(declared: Schemas.OfParameter.Data): PlainMap {
+  const plain = typed(declared.name, declared.type);
+  if (declared.description !== null) plain.set("description", declared.description);
+  return plain;
+}
+
+/** Parameters by name, each an `OfParameter` (its type null for a parameter of any type), written as a schema's
+ * parameters are; none are not written. */
+export const PARAMETERS = new Terms.ValueProperty(LIST,
+  (parameters) => (parameters as Symbols).size === 0 ? null : [...(parameters as Symbols).values()].map(parameter),
+  (plain) => new Symbols((plain as PlainMap[]).map((entry) => [entry.get("name") as string, new Schemas.OfParameter.Data({
+    name: entry.get("name") as string, type: typeOf(entry) as Schemas.OfAny.Data | null,
+    description: (entry.get("description") as string | undefined) ?? null })])));
+
+/** The names of the parameters an application gives arguments for, in the predicate's order; none are not written. */
+export const GIVEN = new Terms.ValueProperty(new Schemas.OfIndexed.Builder().of((t) => t.as_native(String)).create(),
+  (names) => (names as readonly string[]).length === 0 ? null : [...(names as readonly string[])],
+  (plain) => Names.from(plain as string[]));
 
 /** The names a builder declares, which it gives as variables: `builder.name`. */
 interface Declaring {
@@ -204,7 +240,7 @@ export class OfPredicate extends Terms.Term {
   declare description: string | null;
   declare requires: any;
   declare symbols: Symbols; // symbol -> schema
-  declare parameters: Symbols; // parameter -> type, or null
+  declare parameters: Symbols; // parameter -> OfParameter
 
   constructor(name: unknown = null, description: unknown = null, requires: unknown = null, symbols: unknown = null,
     parameters: unknown = null) {
@@ -220,9 +256,26 @@ export class OfPredicate extends Terms.Term {
       .map(([symbol]) => `symbol ${repr(symbol)} needs a named reference object schema`);
   }
 
-  /** The predicate applied to `args`, specs for its symbols and then its parameters, in order. */
+  /** The predicate applied: `args` are specs for its symbols, in order, and then for its parameters, in order; a last
+   * object literal gives specs for its parameters by name. A parameter given no argument is unbound. */
   call(...args: unknown[]): OfApply {
-    return new OfApply(this, args.map((argument) => DIALECT.resolve(argument)));
+    const named = args.length > 0 && isRecord(args[args.length - 1]) ? args.pop() as Record<string, unknown> : {};
+    const names = [...this.parameters.keys()];
+    const symbols = args.slice(0, this.symbols.size);
+    const rest = args.slice(this.symbols.size);
+    if (rest.length > names.length) {
+      throw new TypeError(`${repr(this.name)} takes ${count(this.symbols.size, "symbol")} and ${count(names.length, "parameter")}, `
+        + `got ${count(args.length, "argument")}`);
+    }
+    const given = new Map(rest.map((argument, i) => [names[i] as string, argument]));
+    for (const [name, argument] of Object.entries(named)) {
+      if (!this.parameters.has(name)) throw new TypeError(`${repr(this.name)} has no parameter ${repr(name)}`);
+      if (given.has(name)) throw new TypeError(`parameter ${repr(name)} is given twice`);
+      given.set(name, argument);
+    }
+    const ordered = names.filter((name) => given.has(name));
+    return new OfApply(this, [...symbols, ...ordered.map((name) => given.get(name))].map((argument) => DIALECT.resolve(argument)),
+      ordered);
   }
 
   /** A predicate, or what a callable taking a predicate builder builds. */
@@ -231,28 +284,46 @@ export class OfPredicate extends Terms.Term {
   }
 }
 
-/** A predicate applied to arguments, for its symbols and then its parameters: whether its `requires` holds with them
- * bound. */
+/** A predicate applied to arguments: one for each symbol, in order, then one for each parameter named in
+ * `parameters`. It holds when the predicate's `requires` holds with them bound, a parameter given none unknown. */
 export class OfApply extends Terms.Term {
   static override KIND = "apply";
   static override ROLE = Terms.APPLICATION;
   static override SLOTS = ["predicate"];
   static override VARIADIC = "arguments";
+  static override VALUES = new Map([["parameters", GIVEN]]);
   declare static Builder: typeof Terms.Builder;
   declare predicate: any;
   declare arguments: readonly any[];
+  declare parameters: Names;
 
-  constructor(predicate: unknown = null, args: readonly unknown[] = []) {
-    super(predicate, args);
+  constructor(predicate: unknown = null, args: readonly unknown[] = [], parameters: readonly string[] | null = null) {
+    super(predicate, args, Names.from(parameters ?? []));
+  }
+
+  /** The predicate's symbols and parameters bound to the values of the arguments, in order; a parameter given no
+   * argument is bound to null, unknown. */
+  bindings(values: readonly unknown[]): Map<string, unknown> {
+    const predicate = this.predicate as OfPredicate;
+    const symbols = this.arguments.length - this.parameters.length;
+    const bound = new Map<string, unknown>([...predicate.parameters.keys()].map((name) => [name, null]));
+    [...predicate.symbols.keys()].slice(0, symbols).forEach((name, i) => bound.set(name, values[i]));
+    this.parameters.forEach((name, i) => bound.set(name, values[symbols + i]));
+    return bound;
   }
 
   override check(): string[] {
     if (!(this.predicate instanceof OfPredicate)) {
       return this.predicate !== null ? ["an application's predicate must be a predicate"] : [];
     }
-    const wanted = this.predicate.binds().length;
-    if (this.arguments.length !== wanted) return [`${repr(this.predicate.name)} takes ${wanted} arguments, got ${this.arguments.length}`];
-    return [];
+    const predicate = this.predicate;
+    const problems: string[] = [];
+    const symbols = this.arguments.length - this.parameters.length;
+    if (symbols !== predicate.symbols.size) problems.push(`${repr(predicate.name)} takes ${count(predicate.symbols.size, "symbol")}, got ${symbols}`);
+    problems.push(...this.parameters.filter((name) => !predicate.parameters.has(name))
+      .map((name) => `${repr(predicate.name)} has no parameter ${repr(name)}`));
+    if (new Set(this.parameters).size !== this.parameters.length) problems.push("a parameter is given more than one argument");
+    return problems;
   }
 }
 
@@ -396,11 +467,12 @@ class PredicateBuilder extends Terms.Builder implements Declaring {
     return this;
   }
 
-  /** Parameters, each a property spec (`(p) => p.name("name")`, with `.of(type)` optionally), in order. */
-  parameters(...specs: Schemas.OfProperty.Spec[]): this {
+  /** Parameters, in order, each an `OfParameter` or a spec (`(p) => p.name("name")`, with `.of(type)` and
+   * `.description(text)` optionally). */
+  parameters(...specs: Schemas.OfParameter.Spec[]): this {
     for (const spec of specs) {
-      const built = spec(new Schemas.OfProperty.Builder()).create();
-      this.heldParameters.set(built.name, built.type);
+      const built = spec instanceof Schemas.OfParameter.Data ? spec : spec(new Schemas.OfParameter.Builder()).create();
+      this.heldParameters.set(built.name, built);
     }
     return this;
   }
@@ -604,9 +676,8 @@ export class Evaluator {
   }
 
   private apply(thunks: Thunk[], node: OfApply): unknown {
-    const predicate = node.predicate as OfPredicate;
     const values = thunks.slice(1).map((thunk) => thunk());
-    return this.interpreter.run(predicate.requires, Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]])));
+    return this.interpreter.run((node.predicate as OfPredicate).requires, Object.fromEntries(node.bindings(values)));
   }
 
   /** Whether each of a choices' arms holds, in order. */
@@ -641,8 +712,7 @@ export class Evaluator {
     }
     if (node instanceof OfApply) {
       const values = node.arguments.map((argument) => this.interpreter.evaluate(argument, scope, new Set()));
-      const predicate = node.predicate as OfPredicate;
-      return this.weighed(predicate.requires, new Symbolics.Variables(Object.fromEntries(predicate.binds().map((name, i) => [name, values[i]]))));
+      return this.weighed((node.predicate as OfPredicate).requires, new Symbolics.Variables(Object.fromEntries(node.bindings(values))));
     }
     if (node instanceof Distributions.Choices) {
       const held = this.held(node, scope);

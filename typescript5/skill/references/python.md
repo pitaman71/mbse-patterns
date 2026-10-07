@@ -108,6 +108,7 @@ assert all(18 <= p.age <= 64 if p.name == "Cy" else p.age >= 65 for p in people)
 ```python fragment
 Predicates.OfPredicate.Builder().name(n).symbols({"the": Schema}).parameters(lambda p: p.name("k")).requires(spec).create()
 HasName(person, "alice")                                    # a predicate applied by reference: its symbols, then parameters
+HasName(person, name="alice")                               # parameters by name too; one given no argument is unknown
 Constraints.OfSet.Builder().predicates(*specs).create()     # specs: predicates, or callables taking a predicate builder
 Constraints.check(predicates)                               # a set, or ValueError with every problem
 Constraints.OfStore(store); Constraints.Builders            # read (and write) predicates; Builders resolves no names

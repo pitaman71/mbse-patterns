@@ -91,6 +91,8 @@ objects:
       index: 1
   s8:
     kind: apply
+    parameters:
+    - name
     arguments:
     - argument:
         $ref: s14
@@ -106,6 +108,8 @@ objects:
       index: 2
   s9:
     kind: apply
+    parameters:
+    - name
     arguments:
     - argument:
         $ref: s14
@@ -121,6 +125,8 @@ objects:
       index: 2
   s10:
     kind: apply
+    parameters:
+    - name
     arguments:
     - argument:
         $ref: s14
@@ -136,6 +142,8 @@ objects:
       index: 2
   s11:
     kind: apply
+    parameters:
+    - name
     arguments:
     - argument:
         $ref: s14

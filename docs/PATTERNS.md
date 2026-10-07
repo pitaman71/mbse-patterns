@@ -18,7 +18,10 @@ It is planned in releases, each landed and reviewed before the next:
 | 0.2 | [The predicate algebra](#the-predicate-algebra) and [pseudorandom numbers](#pseudorandom-numbers) | built |
 | 0.3 | [Parameters and application](#parameters-and-application), [distributions](#distributions), [sampling](#pseudorandom-numbers) and [generators](#generators) | built |
 | 0.4 | [Distributions](#distributions) as terms of a predicate: `Choices` and distributions of values | built |
-| 0.5 | [Characterizers](#characterizers), which fit distributions from streams of data | designed |
+| 0.5 | The constraints vocabulary: a predicate's constraint is what it `requires` | built |
+| 0.6 | [Parameters](#parameters-and-application) as mbse-schemas' `OfParameter`; applications give them in order or by name, some or all | built |
+| 0.7 | [Characterizers](#characterizers), which fit distributions from streams of data | designed |
+| 0.8 | [Transforms](TRANSFORMS.md): generation as deterministic steps, every choice a question, kept as a trace | designed |
 
 ```
 python3/mbse/Patterns/, typescript5/src/
@@ -41,14 +44,15 @@ python3/mbse/Patterns/, typescript5/src/
   names are the symbols and parameters: "a contact is an adult" has one symbol, `the`, and the constraint `the.age >=
   18`; "a person has a name" has a symbol, `person`, a parameter, `name`, and the constraint `person.name == name`.
 - **Predicates are built as schemas are.** `OfPredicate.Builder()` is fluent: `.name(...)`, `.description(...)`,
-  `.symbols({"the": Contact})` and `.parameters(lambda p: p.name("name"))` (property specs, as an object schema's
-  properties are, each with an optional type), added in order, and `.requires(spec)` and `.forbids(spec)`, which add
-  conditions (`requires` is their conjunction, and `forbids` adds the negation), finalized by `create()`, `clone()` or
-  `update()`, none of which validates. A condition is any spec of the algebra: data, a writer, a term built by its
-  builder, or, in Python, what `Python.Text.FromFunction(lambda person, name: person.name == name)` reads from a
-  function whose parameters are the symbols and parameters. Elsewhere they are written as Basic variables of the same
-  names (`c = E.variable("c")`), which the builder gives once it declares them (`pred.person`). A predicate without a
-  name is written inline, where it is used; one without symbols is a statement about the whole store.
+  `.symbols({"the": Contact})` and `.parameters(lambda p: p.name("name"))` (mbse-schemas' `OfParameter` specs, as a
+  schema's parameters are, each with an optional type and description), added in order, and `.requires(spec)` and
+  `.forbids(spec)`, which add conditions (`requires` is their conjunction, and `forbids` adds the negation), finalized
+  by `create()`, `clone()` or `update()`, none of which validates. A condition is any spec of the algebra: data, a
+  writer, a term built by its builder, or, in Python, what `Python.Text.FromFunction(lambda person, name: person.name ==
+  name)` reads from a function whose parameters are the symbols and parameters. Elsewhere they are written as Basic
+  variables of the same names (`c = E.variable("c")`), which the builder gives once it declares them (`pred.person`). A
+  predicate without a name is written inline, where it is used; one without symbols is a statement about the whole
+  store.
 - **Predicates live beside the schemas.** A schema does not hold its predicates, and mbse-schemas does not depend on
   mbse-expressions; several sets may constrain one schema, and a program chooses which apply.
 - **Predicates are terms.** `OfPredicate` is a kind of the algebra that binds its symbols and parameters within its
@@ -163,14 +167,24 @@ and forbidden links are statements about the store, so they need both.
 
 ## Parameters and application
 
-Built in 0.3. A predicate is used by reference: its uses hold the predicate itself, so that one predicate, defined once,
-is applied in several places and written once.
+Built in 0.3; parameters became `OfParameter`s, given by name or in part, in 0.6. A predicate is used by reference: its
+uses hold the predicate itself, so that one predicate, defined once, is applied in several places and written once.
 
 - **`HasName(pred.person, "alice")` applies a predicate** (`HasName.call(...)` in TypeScript, where an object is not
-  callable): an `OfApply` term (`Patterns.OfApply`) whose first argument is the predicate itself and whose others are
-  specs for its symbols and then its parameters, in order. It holds when the predicate's `requires` holds with them
-  bound; `Evaluator(store)` evaluates it so. Its problems are a wrong number of arguments ("'HasName' takes 2 arguments,
-  got 1") and a first argument that is not a predicate; a predicate that applies itself is a cycle.
+  callable): an `OfApply` term (`Patterns.OfApply`) whose first argument is the predicate itself, then specs for its
+  symbols, in order, then for its parameters. Symbols and parameters are bound apart: a symbol is bound to an object of
+  its schema, so every symbol takes an argument, in order; a parameter is given a value where the predicate is applied,
+  in order after the symbols or by name (`HasName(pred.person, name="alice")`; in TypeScript a last object literal,
+  `HasName.call(pred.person, { name: "alice" })`), some or all. The application holds the names of the parameters it
+  gives (`parameters`, written in the predicate's order, so applying by name and in order give the same term). It
+  holds when the predicate's `requires` holds with them bound, and a parameter given no argument is unknown;
+  `Evaluator(store)` evaluates it so. Applying refuses too many arguments, a name that is no parameter and a parameter
+  given twice; an application's problems are a wrong number of symbols ("'HasName' takes 1 symbol, got 0"), a name that
+  is no parameter, and a first argument that is not a predicate; a predicate that applies itself is a cycle.
+- **A predicate's parameters are mbse-schemas' `OfParameter`s**: a name, a type (or none, for a parameter of any type)
+  and a description, written as a schema's parameters are. A parameter is a variable whose binder is the predicate, as
+  a schema's is (mbse-schemas'
+  [Parametrics](https://github.com/pitaman71/mbse-schemas/blob/main/docs/FRAMEWORK.md#parametrics)).
 - **A predicate with parameters is checked where it is applied**: a validator refuses one, since its constraint holds
   only for values of its parameters; a query takes them as variables (`select(HasName, {"name": "alice"})`).
 
@@ -337,7 +351,7 @@ entries, from a family the caller chooses (or the best of several by a criterion
 - Predicates are used by reference or inline, never by name.
 - A predicate is used by reference: it is a term of the algebra, and applying it (`HasName(person, "alice")`) is a term
   that holds the predicate itself as its first argument, so a predicate used in several places is one object, written
-  once. Predicates take parameters, as property specs, bound by applying them.
+  once. Predicates take parameters, mbse-schemas' `OfParameter`s, bound by applying them.
 - A builder gives the variables it declares by name (`pred.person`), as the user's example writes them.
 - Sampling is specified on the random source's words alone, with integer arithmetic and correctly rounded IEEE 754
   operations, so that both languages draw the same values; transcendental functions are ported rather than taken

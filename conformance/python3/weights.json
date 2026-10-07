@@ -152,6 +152,9 @@
     },
     "s8": {
       "kind": "apply",
+      "parameters": [
+        "name"
+      ],
       "arguments": [
         {
           "argument": {
@@ -178,6 +181,9 @@
     },
     "s9": {
       "kind": "apply",
+      "parameters": [
+        "name"
+      ],
       "arguments": [
         {
           "argument": {
@@ -204,6 +210,9 @@
     },
     "s10": {
       "kind": "apply",
+      "parameters": [
+        "name"
+      ],
       "arguments": [
         {
           "argument": {
@@ -230,6 +239,9 @@
     },
     "s11": {
       "kind": "apply",
+      "parameters": [
+        "name"
+      ],
       "arguments": [
         {
           "argument": {

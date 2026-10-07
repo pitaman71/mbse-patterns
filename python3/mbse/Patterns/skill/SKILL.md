@@ -68,8 +68,9 @@ Why the mbse repositories exist, and this one's part: [MBSE.md](https://github.c
    scanning; `explain` shows the plan. Relations' `unique` clauses tell it when such a hop gives at most one object.
 7. **Reading predicates resolves their schemas by name**: read through `Constraints.OfStore(store)`, with the store that
    registers them. Writing needs no store.
-8. **A predicate is used by reference.** One with parameters (`.parameters(lambda p: p.name("name"))`) is applied:
-   `HasName(pred.person, "alice")` holds the predicate itself and binds its symbols, then its parameters, in order.
+8. **A predicate is used by reference.** One with parameters (`.parameters(lambda p: p.name("name"))`, mbse-schemas'
+   `OfParameter`s) is applied: `HasName(pred.person, "alice")` holds the predicate itself and binds its symbols, in
+   order, then its parameters, in order or by name (`name="alice"`), some or all; one given no argument is unknown.
    Shared predicates are written once. A validator refuses a predicate with parameters; a query takes them as
    variables.
 9. **A pattern is a predicate.** `Distributions.Choices` weighs alternatives, its arms (`a.weight(3).requires(...)`),

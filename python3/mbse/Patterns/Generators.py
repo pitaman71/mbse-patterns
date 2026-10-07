@@ -118,7 +118,8 @@ class _Attempt:
                 self.visit(argument, scope)
         elif isinstance(node, Predicates.OfApply) and isinstance(node.predicate, Predicates.OfPredicate):
             arguments = [self._argument(argument, scope) for argument in node.arguments]
-            self.visit(node.predicate.requires, dict(zip(node.predicate.binds(), arguments)))
+            bound = {name: term for name, term in node.bindings(arguments).items() if term is not None}  # unbound stay so
+            self.visit(node.predicate.requires, bound)
         elif isinstance(node, Distributions.Choices):
             index = Sampling.weighted(self.step.split(f"choices {self.met}"), [arm.weight for arm in node.arms])
             self.met += 1

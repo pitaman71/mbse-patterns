@@ -119,7 +119,8 @@ class Attempt {
       for (const argument of node.arguments) this.visit(argument, scope);
     } else if (node instanceof Predicates.OfApply && node.predicate instanceof Predicates.OfPredicate) {
       const args = node.arguments.map((argument) => this.argument(argument, scope));
-      this.visit(node.predicate.requires, new Map(node.predicate.binds().map((name, i) => [name, args[i]])));
+      const bound = [...node.bindings(args)].filter(([, term]) => term !== null); // unbound parameters stay so
+      this.visit(node.predicate.requires, new Map(bound) as Scope);
     } else if (node instanceof Distributions.Choices) {
       const index = Sampling.weighted(this.step.split(`choices ${this.met}`), node.arms.map((arm) => arm.weight as number));
       this.met += 1;

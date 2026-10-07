@@ -14,18 +14,19 @@ builder finalized by `create()`, `clone()` or `update()`, none of which validate
         .create()
     )
 
-`.parameters(...)` takes property specs, as an object schema's `.properties(...)` does, each with a name and, optionally,
-a type. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold; its `requires`
+`.parameters(...)` takes parameter specs, as a schema's `.parameters(...)` does (mbse-schemas' `OfParameter`), each with a
+name and, optionally, a type and a description. `.requires(spec)` adds a condition, and `.forbids(spec)` the condition that `spec` does not hold; its `requires`
 is their conjunction. A condition is any spec of the algebra: a term, a writer, or what `Python.Text.FromFunction` reads
 from a function whose parameters are the symbols and parameters. A builder gives the variables it declares by name, so
 `pred.person` is the variable `person` once `pred.symbols(APerson)` declares it. A predicate without symbols is a
 statement about the whole store; one without a name is written inline, where it is used.
 
 A predicate is a term of the algebra, `DIALECT`, which extends mbse-expressions' Basic: it binds its symbols and
-parameters within `requires` (an import, in mbse-expressions' terms). Applying it, `HasName(pred.person, "alice")`, is a
-term too, `OfApply`, which holds the predicate itself, by reference, and arguments for its symbols and then its
-parameters, in order: it holds when the predicate's `requires` holds with them bound. A predicate used in several places
-is one object, and is written once.
+parameters within `requires` (an import, in mbse-expressions' terms). Applying it, `HasName(pred.person, "alice")` or
+`HasName(pred.person, name="alice")`, is a term too, `OfApply`, which holds the predicate itself, by reference,
+arguments for its symbols, in order, and arguments for its parameters, in order or by name, some or all: it holds when
+the predicate's `requires` holds with them bound, a parameter given no argument unknown. A predicate used in several
+places is one object, and is written once.
 
 The algebra's other terms, each a data class with a builder, are built as a predicate is, from a spec (data, or a
 callable taking the builder):
@@ -78,6 +79,10 @@ def _schema_name(schema: Any) -> str:
     return name
 
 
+def _count(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
 def _conjunction(conditions: list[Any]) -> Any:
     """The conditions' conjunction, left to right; None if there are none."""
     constraint = None
@@ -120,8 +125,20 @@ SYMBOLS = Terms.ValueProperty(_LIST, lambda symbols: [_typed(n, s) for n, s in s
 """Symbols by name, each with the schema of the objects it binds, written as an object schema's properties are; none
 are not written."""
 
-PARAMETERS = SYMBOLS
-"""Parameters by name, each with its type, or None for a parameter of any type, written as symbols are."""
+def _parameter(parameter: Schemas.OfParameter.Data) -> dict[str, Any]:
+    described = {} if parameter.description is None else {"description": parameter.description}
+    return {**_typed(parameter.name, parameter.type), **described}
+
+
+PARAMETERS = Terms.ValueProperty(
+    _LIST, lambda parameters: [_parameter(p) for p in parameters.values()] or None,
+    lambda plain: {e["name"]: Schemas.OfParameter.Data(e["name"], _type(e), e.get("description")) for e in plain})
+"""Parameters by name, each an `OfParameter` (its type None for a parameter of any type), written as a schema's
+parameters are; none are not written."""
+
+GIVEN = Terms.ValueProperty(Schemas.OfIndexed.Builder().of(lambda t: t.as_native(str)).create(),
+                            lambda names: list(names) or None, tuple)
+"""The names of the parameters an application gives arguments for, in the predicate's order; none are not written."""
 
 
 VALUES_HELD = ("symbols", "parameters")
@@ -189,7 +206,7 @@ class OfPredicate(Terms.Term):
     description: str | None = None
     requires: Any = None
     symbols: dict[str, Any] = field(default_factory=dict)  # symbol -> schema
-    parameters: dict[str, Any] = field(default_factory=dict)  # parameter -> type, or None
+    parameters: dict[str, Schemas.OfParameter.Data] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.symbols = {} if self.symbols is None else self.symbols
@@ -202,9 +219,24 @@ class OfPredicate(Terms.Term):
         return [f"symbol {symbol!r} needs a named reference object schema" for symbol, schema in self.symbols.items()
                 if not (isinstance(schema, Schemas.OfObject.Data) and schema.ref and schema.name is not None)]
 
-    def call(self, *arguments: Any) -> OfApply:
-        """The predicate applied to `arguments`, specs for its symbols and then its parameters, in order."""
-        return OfApply(self, tuple(DIALECT.resolve(argument) for argument in arguments))
+    def call(self, *arguments: Any, **parameters: Any) -> OfApply:
+        """The predicate applied: `arguments` are specs for its symbols, in order, and then for its parameters, in
+        order; `parameters` are specs for its parameters, by name. A parameter given no argument is unbound."""
+        names = list(self.parameters)
+        symbols, rest = arguments[:len(self.symbols)], arguments[len(self.symbols):]
+        if len(rest) > len(names):
+            raise TypeError(f"{self.name!r} takes {_count(len(self.symbols), 'symbol')} and "
+                            f"{_count(len(names), 'parameter')}, got {_count(len(arguments), 'argument')}")
+        given = dict(zip(names, rest))
+        for name, argument in parameters.items():
+            if name not in self.parameters:
+                raise TypeError(f"{self.name!r} has no parameter {name!r}")
+            if name in given:
+                raise TypeError(f"parameter {name!r} is given twice")
+            given[name] = argument
+        ordered = tuple(name for name in names if name in given)
+        return OfApply(self, tuple(DIALECT.resolve(argument) for argument in (*symbols, *(given[n] for n in ordered))),
+                       ordered)
 
     __call__ = call
 
@@ -216,23 +248,40 @@ class OfPredicate(Terms.Term):
 
 @dataclass(eq=False)
 class OfApply(Terms.Term):
-    """A predicate applied to arguments, for its symbols and then its parameters: whether its `requires` holds with them
-    bound."""
+    """A predicate applied to arguments: one for each symbol, in order, then one for each parameter named in
+    `parameters`. It holds when the predicate's `requires` holds with them bound, a parameter given none unknown."""
 
     KIND = "apply"
     ROLE = Terms.APPLICATION
     SLOTS = ("predicate",)
     VARIADIC = "arguments"
+    VALUES = {"parameters": GIVEN}
     predicate: Any = None
     arguments: tuple[Any, ...] = ()
+    parameters: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        self.parameters = () if self.parameters is None else tuple(self.parameters)
+
+    def bindings(self, values: list[Any]) -> dict[str, Any]:
+        """The predicate's symbols and parameters bound to the values of the arguments, in order; a parameter given no
+        argument is bound to None, unknown."""
+        predicate, symbols = self.predicate, len(self.arguments) - len(self.parameters)
+        return {**dict.fromkeys(predicate.parameters), **dict(zip(predicate.symbols, values[:symbols])),
+                **dict(zip(self.parameters, values[symbols:]))}
 
     def check(self) -> list[str]:
         if not isinstance(self.predicate, OfPredicate):
             return ["an application's predicate must be a predicate"] if self.predicate is not None else []
-        wanted = len(self.predicate.binds())
-        if len(self.arguments) != wanted:
-            return [f"{self.predicate.name!r} takes {wanted} arguments, got {len(self.arguments)}"]
-        return []
+        problems = []
+        symbols, wanted = len(self.arguments) - len(self.parameters), len(self.predicate.symbols)
+        if symbols != wanted:
+            problems.append(f"{self.predicate.name!r} takes {_count(wanted, 'symbol')}, got {symbols}")
+        problems += [f"{self.predicate.name!r} has no parameter {name!r}" for name in self.parameters
+                     if name not in self.predicate.parameters]
+        if len(set(self.parameters)) != len(self.parameters):
+            problems.append("a parameter is given more than one argument")
+        return problems
 
 
 @dataclass(eq=False)
@@ -354,11 +403,12 @@ class _PredicateBuilder(Terms.Builder, Declaring):
         self._symbols.update(symbols)
         return self
 
-    def parameters(self, *specs: Schemas.OfProperty.Spec) -> _PredicateBuilder:
-        """Parameters, each a property spec (`lambda p: p.name("name")`, with `.of(type)` optionally), in order."""
+    def parameters(self, *specs: Schemas.OfParameter.Spec) -> _PredicateBuilder:
+        """Parameters, in order, each an `OfParameter` or a spec (`lambda p: p.name("name")`, with `.of(type)` and
+        `.description(text)` optionally)."""
         for spec in specs:
-            built = spec(Schemas.OfProperty.Builder()).create()
-            self._parameters[built.name] = built.type
+            built = spec if isinstance(spec, Schemas.OfParameter.Data) else spec(Schemas.OfParameter.Builder()).create()
+            self._parameters[built.name] = built
         return self
 
     def requires(self, *specs: Any) -> _PredicateBuilder:
@@ -508,9 +558,7 @@ class Evaluator:
         return self.extent(node.schema)  # type: ignore[arg-type]
 
     def _apply(self, thunks: Any, node: OfApply, scope: Any) -> Any:
-        predicate = node.predicate
-        values = [thunk() for thunk in thunks[1:]]
-        return self.interpreter(predicate.requires, dict(zip(predicate.binds(), values)))
+        return self.interpreter(node.predicate.requires, node.bindings([thunk() for thunk in thunks[1:]]))
 
     def held(self, node: Distributions.Choices, scope: Any) -> list[bool | None]:
         """Whether each of a choices' arms holds, in order."""
@@ -538,7 +586,7 @@ class Evaluator:
             return self._weigh(node.arguments[0], scope) * self._weigh(node.arguments[1], scope)
         if isinstance(node, OfApply):
             values = [self.interpreter.evaluate(argument, scope, set()) for argument in node.arguments]
-            return self._weigh(node.predicate.requires, Symbolics.Variables(dict(zip(node.predicate.binds(), values))))
+            return self._weigh(node.predicate.requires, Symbolics.Variables(node.bindings(values)))
         if isinstance(node, Distributions.Choices):
             weights = [arm.weight * self._weigh(arm.condition, scope)
                        for arm, holds in zip(node.arms, self.held(node, scope)) if holds is True]
