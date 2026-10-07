@@ -1,5 +1,5 @@
 <!-- nav -->
-[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
+[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Transforms →](TRANSFORMS.md)
 
 # Equivalence
 
@@ -37,4 +37,4 @@ language. Any other difference is a bug.
 ---
 
 <!-- nav -->
-[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
+[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Transforms →](TRANSFORMS.md)
