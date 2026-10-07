@@ -50,7 +50,7 @@ Why the mbse repositories exist, and this one's part: [MBSE.md](https://github.c
 
 ## Practices that prevent most mistakes
 
-1. **A symbol's schema is a named reference object schema**, as a store registers it. The constraint's free names are
+1. **A symbol's schema is a named object schema**, as a store registers it; a match binds what its extent holds. The constraint's free names are
    the symbols and parameters, written as Basic variables of the same names (`c = E.variable("c")`, or `pred.c` from the
    builder that declares `c`), and, in a query, its variables; only Basic's core vocabulary is allowed. `Constraints.check(...)` and every validator and query reject anything else up
    front.

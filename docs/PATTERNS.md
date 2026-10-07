@@ -39,7 +39,7 @@ python3/mbse/Patterns/, typescript5/src/
 ## Predicates
 
 - **A predicate is a named constraint over symbols and parameters.** Each symbol is bound to an object of a schema, a
-  named reference object schema as a store registers it; the predicate applies to a *match*, a binding of every symbol
+  named object schema as a store registers it, whose extent gives its objects; the predicate applies to a *match*, a binding of every symbol
   to an object of its schema. Each parameter is a value, given where the predicate is applied. The constraint it
   `requires` is an expression of the predicate algebra (Basic's, mbse-expressions', and the terms below) whose free
   names are the symbols and parameters: "a contact is an adult" has one symbol, `the`, and the constraint `the.age >=
@@ -72,7 +72,7 @@ python3/mbse/Patterns/, typescript5/src/
   `register(store)` registers the meta-schemas in another store (a `Proxies.OfStore` then holds predicates as
   proxies). A builder holds the symbols it is given as data; only reading a snapshot resolves names.
 - **Predicates are checked when asked**, as terms are (`DIALECT.validate`, or `predicate.validate()`): a symbol whose
-  schema is not a named reference object schema, a missing `requires`, and its problems as a core constraint over the
+  schema is not a named object schema, a missing `requires`, and its problems as a core constraint over the
   symbols and parameters ("requires: argument 1: variable 'n' is not bound"). `Constraints.check(predicates)` gives a
   set, and raises `ValueError` with every predicate's problems, labelled by its name, a predicate without a name, and a
   name two predicates share ("defined twice").
@@ -101,7 +101,7 @@ python3/mbse/Patterns/, typescript5/src/
   data for which its constraint holds, each a mapping from symbol to object; `variables` binds the constraint's other
   names, and `unknown` also gives the matches for which it is unknown.
 - **Results stream lazily.** `select` returns an iterator. The predicate is checked when `select` is called, which
-  raises for no symbols, a symbol's schema that is not a named reference object schema or that the store does not
+  raises for no symbols, a symbol's schema that is not a named object schema or that the store does not
   hold, a variable named like a symbol, or a constraint that is not a core Basic constraint over the symbols and the
   variables; the extents are read only as matches are asked for. A constraint that does not give a bool raises as it is
   evaluated.
@@ -308,9 +308,10 @@ rebuild, reversibility, pipelines).
   establish its after. Resolution is linear: the candidates are found again after every step.
 - **A policy only ranks**: `Policy(Clause("Label", {"case": "lower"}, weight), ...)` weighs the candidates of one
   transform with those arguments, and answers open parameters; a candidate no clause weighs is not the policy's to take.
-- **Schemas are matched as objects** in a store of schemas (mbse-schemas' `Reflection.store(schemas)`), whose objects
-  are the schemas themselves: a symbol of `Reflection.META[Schemas.OfObject.Data]` binds an object schema, and a rewrite
-  changes it in place.
+- **Schemas are matched as objects** in a store of schemas (mbse-schemas' `Reflection.of(store)`), whose objects are
+  the schemas a store registers and those they refer to: a symbol of `Schemas.OfObject.Schema` binds an object schema,
+  the predicate says which match, reading what a schema holds as values (`s.get("properties")`) and comparing them
+  deeply, and a rewrite changes a schema in place.
 - **The trace** is data: `session.trace(Transforms.register(store))` builds a `Transforms.Trace`, its steps in order,
   each its transform, match, arguments, who decided it, and a composite's mode (`in`, `over`) and own steps.
 
@@ -351,6 +352,10 @@ entries, from a family the caller chooses (or the best of several by a criterion
   keys, and ordering scans by extent size.
 
 ## Resolved
+
+- A symbol's schema is a named object schema, not necessarily a reference object schema (0.7.3): its objects are what
+  the store's extent holds, reference objects. A schema in mbse-schemas' store of schemas is such an object, identified
+  by itself, though its meta-schema is the module form's, a value object schema, since a module nests schemas.
 
 - Predicates live beside the schemas, in this package, not inside mbse-schemas' schemas: mbse-schemas cannot depend
   on mbse-expressions, and several sets may apply to one schema.

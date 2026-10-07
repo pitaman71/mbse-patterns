@@ -252,8 +252,8 @@ export class OfPredicate extends Terms.Term {
   }
 
   override check(): string[] {
-    return [...this.symbols].filter(([, schema]) => !(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null))
-      .map(([symbol]) => `symbol ${repr(symbol)} needs a named reference object schema`);
+    return [...this.symbols].filter(([, schema]) => !(schema instanceof Schemas.OfObject.Data && schema.name !== null))
+      .map(([symbol]) => `symbol ${repr(symbol)} needs a named object schema`);
   }
 
   /** The predicate applied: `args` are specs for its symbols, in order, and then for its parameters, in order; a last

@@ -216,8 +216,8 @@ class OfPredicate(Terms.Term):
         return (*self.symbols, *self.parameters)
 
     def check(self) -> list[str]:
-        return [f"symbol {symbol!r} needs a named reference object schema" for symbol, schema in self.symbols.items()
-                if not (isinstance(schema, Schemas.OfObject.Data) and schema.ref and schema.name is not None)]
+        return [f"symbol {symbol!r} needs a named object schema" for symbol, schema in self.symbols.items()
+                if not (isinstance(schema, Schemas.OfObject.Data) and schema.name is not None)]
 
     def call(self, *arguments: Any, **parameters: Any) -> OfApply:
         """The predicate applied: `arguments` are specs for its symbols, in order, and then for its parameters, in

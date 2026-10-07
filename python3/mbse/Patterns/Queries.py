@@ -111,8 +111,8 @@ class _Plan:
     def __init__(self, store: Stores.Store, predicate: Any, variables: Mapping[str, Any]):
         symbols = dict(predicate.symbols)
         for symbol, schema in symbols.items():
-            if not (isinstance(schema, Schemas.OfObject.Data) and schema.ref and schema.name is not None):
-                raise ValueError(f"symbol {symbol!r} needs a named reference object schema")
+            if not (isinstance(schema, Schemas.OfObject.Data) and schema.name is not None):
+                raise ValueError(f"symbol {symbol!r} needs a named object schema")
             store.schema(schema.name)  # raises for a schema the store does not hold
         for name in variables:
             if name in symbols:

@@ -247,7 +247,7 @@ they can become one of their own, mbse-transforms, depending on this one.
    sessions (`take`, `step_over`, `step_in`, composites), policies that rank, and traces as data, in both languages,
    with the determinism test that two runs (and the two implementations) give byte-identical traces and results.
 2. **A first transform with both directions** (schemas are matched as objects through mbse-schemas' `Reflection`,
-   0.7.2, which TRF-07 tests): mbse-schemas' `ToDataclass` and `FromDataclass` as one invertible
+   0.8, which TRF-07 tests): mbse-schemas' `ToDataclass` and `FromDataclass` as one invertible
    transform (schemas to Python's `ast` and back), which tests undo and inversion on a small, known case.
 3. **Diff and reused decisions**: paths, keys, trace diffs, and reruns that reuse decisions and report orphans.
 4. **Incremental rebuild**: recorded reads, fingerprints and invalidation, tested against runs from scratch.

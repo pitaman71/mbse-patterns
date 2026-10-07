@@ -116,8 +116,8 @@ class Plan {
   constructor(readonly store: Stores.Store, predicate: Predicates.OfPredicate, variables: Variables) {
     const symbols = new Map(predicate.symbols) as Map<string, Schemas.OfObject.Data>;
     for (const [symbol, schema] of symbols) {
-      if (!(schema instanceof Schemas.OfObject.Data && schema.ref && schema.name !== null)) {
-        throw new Errors.ValueError(`symbol ${repr(symbol)} needs a named reference object schema`);
+      if (!(schema instanceof Schemas.OfObject.Data && schema.name !== null)) {
+        throw new Errors.ValueError(`symbol ${repr(symbol)} needs a named object schema`);
       }
       store.schema(schema.name); // throws for a schema the store does not hold
     }
