@@ -494,7 +494,8 @@ def typing(predicate: Any) -> list[str]:
                     continue
                 symbol, name = side.arguments[0].name, side.arguments[1].value
                 schema = predicate.symbols.get(symbol)
-                property_schema = schema.properties.get(name) if isinstance(schema, Schemas.OfObject.Data) else None
+                declared = schema.properties.get(name) if isinstance(schema, Schemas.OfObject.Data) else None
+                property_schema = declared and declared.type
                 if isinstance(property_schema, Schemas.OfNative.Data) and given is not None:
                     wanted = property_schema.token.name
                     if wanted != given:

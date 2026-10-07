@@ -547,7 +547,7 @@ export function typing(predicate: { symbols: ReadonlyMap<string, unknown>; requi
           && side.arguments[0] instanceof E.OfVariable.Data && side.arguments[1] instanceof E.OfLiteral.Data)) continue;
         const [symbol, name] = [side.arguments[0].name as string, side.arguments[1].value as string];
         const schema = predicate.symbols.get(symbol);
-        const property = schema instanceof Schemas.OfObject.Data ? schema.properties.get(name) : undefined;
+        const property = schema instanceof Schemas.OfObject.Data ? schema.properties.get(name)?.type : undefined;
         if (property instanceof Schemas.OfNative.Data && given !== null) {
           const wanted = (property.token as { name: string }).name;
           if (wanted !== given) problems.push(`${symbol}.${name} is ${wanted}, but its distribution gives ${given}`);
