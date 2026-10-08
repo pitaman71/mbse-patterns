@@ -254,6 +254,7 @@ class OfApply(Terms.Term):
     KIND = "apply"
     ROLE = Terms.APPLICATION
     SLOTS = ("predicate",)
+    REFERS = frozenset({"predicate"})
     VARIADIC = "arguments"
     VALUES = {"parameters": GIVEN}
     predicate: Any = None
@@ -532,11 +533,13 @@ class Evaluator:
     """Evaluates predicates over `store`: Basic's rules, with extents from the store, applications of predicates,
     choices (whether the number of arms that hold satisfies their count) and distributions (whether the value their
     body equates their symbol with is in their support, and the body holds with it). Extents are read once per
-    evaluator, so an evaluator sees the store as it was when first asked."""
+    evaluator, so an evaluator sees the store as it was when first asked. A predicate may apply itself (recursion): an
+    application made again, with the same values, while it is being evaluated is unknown, since nothing decides it."""
 
     def __init__(self, store: Stores.Store):
         self.store = store
         self._extents: dict[str, tuple[Any, ...]] = {}
+        self._applying: list[tuple[Any, list[Any]]] = []  # the applications being evaluated, and their values
         self.observe: dict[int, list[bool | None]] | None = None  # when given, how each choices' arms held, by id
         self.interpreter = _Interpreter(DIALECT, {
             "operation": Basic.OPERATIONS, "quantifier": Basic.QUANTIFIERS,
@@ -558,7 +561,15 @@ class Evaluator:
         return self.extent(node.schema)  # type: ignore[arg-type]
 
     def _apply(self, thunks: Any, node: OfApply, scope: Any) -> Any:
-        return self.interpreter(node.predicate.requires, node.bindings([thunk() for thunk in thunks[1:]]))
+        values = [thunk() for thunk in thunks[1:]]
+        if any(predicate is node.predicate and len(given) == len(values) and all(map(_same, given, values))
+               for predicate, given in self._applying):
+            return None  # applied again, with the same values, within itself: nothing decides it
+        self._applying.append((node.predicate, values))
+        try:
+            return self.interpreter(node.predicate.requires, node.bindings(values))
+        finally:
+            self._applying.pop()
 
     def held(self, node: Distributions.Choices, scope: Any) -> list[bool | None]:
         """Whether each of a choices' arms holds, in order."""
@@ -592,6 +603,11 @@ class Evaluator:
                        for arm, holds in zip(node.arms, self.held(node, scope)) if holds is True]
             return (weights[0] if weights else 0.0) if node.decreasing else sum(weights)
         return 1.0
+
+
+def _same(a: Any, b: Any) -> bool:
+    """Whether two values are the same: one object, or natives of one type with one value."""
+    return a is b or (type(a) is type(b) and type(a) in (bool, int, float, str) and a == b)
 
 
 def _truth(value: Any) -> bool | None:

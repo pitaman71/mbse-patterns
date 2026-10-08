@@ -182,7 +182,12 @@ uses hold the predicate itself, so that one predicate, defined once, is applied 
   holds when the predicate's `requires` holds with them bound, and a parameter given no argument is unknown;
   `Evaluator(store)` evaluates it so. Applying refuses too many arguments, a name that is no parameter and a parameter
   given twice; an application's problems are a wrong number of symbols ("'HasName' takes 1 symbol, got 0"), a name that
-  is no parameter, and a first argument that is not a predicate; a predicate that applies itself is a cycle.
+  is no parameter, and a first argument that is not a predicate.
+- **A predicate may apply itself** (0.8.2), directly or through others: recursion, which mbse-expressions does not count
+  as a cycle, since an application's predicate is a definition it refers to (`REFERS`). Evaluation follows it until
+  a condition decides it (`Even(n)`: `n == 0 or (n >= 2 and Even(n - 2))`), and an application made again with the same
+  values (one object, or natives of one type and value) while it is being evaluated is unknown, since nothing decides
+  it (`Loop(c)`: `Loop(c)`). Recursion over values that never repeat ends where the host's stack does.
 - **A predicate's parameters are mbse-schemas' `OfParameter`s**: a name, a type (or none, for a parameter of any type)
   and a description, written as a schema's parameters are. A parameter is a variable whose binder is the predicate, as
   a schema's is (mbse-schemas'

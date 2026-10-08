@@ -290,6 +290,7 @@ export class OfApply extends Terms.Term {
   static override KIND = "apply";
   static override ROLE = Terms.APPLICATION;
   static override SLOTS = ["predicate"];
+  static override REFERS = new Set(["predicate"]);
   static override VARIADIC = "arguments";
   static override VALUES = new Map([["parameters", GIVEN]]);
   declare static Builder: typeof Terms.Builder;
@@ -643,10 +644,13 @@ class Interpreter extends F.Interpreter {
 /** Evaluates predicates over `store`: Basic's rules, with extents from the store, applications of predicates, choices
  * (whether the number of arms that hold satisfies their count) and distributions (whether the value their body equates
  * their symbol with is in their support, and the body holds with it). Extents are read once per evaluator, so an
- * evaluator sees the store as it was when first asked. */
+ * evaluator sees the store as it was when first asked. A predicate may apply itself (recursion): an application made
+ * again, with the same values, while it is being evaluated is unknown, since nothing decides it. */
 export class Evaluator {
   readonly interpreter: F.Interpreter;
   readonly #extents = new Map<string, readonly Visitable[]>();
+  /** The applications being evaluated, and their values. */
+  readonly #applying: [unknown, unknown[]][] = [];
   /** When given, how each choices' arms held, by node. */
   observe: Map<unknown, (boolean | null)[]> | null = null;
 
@@ -677,7 +681,16 @@ export class Evaluator {
 
   private apply(thunks: Thunk[], node: OfApply): unknown {
     const values = thunks.slice(1).map((thunk) => thunk());
-    return this.interpreter.run((node.predicate as OfPredicate).requires, Object.fromEntries(node.bindings(values)));
+    if (this.#applying.some(([predicate, given]) => predicate === node.predicate && given.length === values.length
+      && given.every((value, i) => value === values[i]))) {
+      return null; // applied again, with the same values, within itself: nothing decides it
+    }
+    this.#applying.push([node.predicate, values]);
+    try {
+      return this.interpreter.run((node.predicate as OfPredicate).requires, Object.fromEntries(node.bindings(values)));
+    } finally {
+      this.#applying.pop();
+    }
   }
 
   /** Whether each of a choices' arms holds, in order. */
