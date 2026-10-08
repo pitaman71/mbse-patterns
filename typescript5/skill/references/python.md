@@ -133,6 +133,9 @@ session.candidates(policy); session.take(c.answer(size=3))  # the caller decides
 session.run(Transforms.Policy(Transforms.Clause("Label", {"case": "upper"}, 2.0)))  # or step_over: the policy decides
 session.trace(Transforms.register(store))                   # the steps as data, a Transforms.Trace
 Transforms.steps(store, trace)                              # read back; step.key == "Label(i=Shelf/items[0])"
+# a rewrite may return what it wrote, by role: {"box": box}; step.wrote and step.match are Links (role, path, element)
+session.wrote(box)                                          # the step that wrote it
+Stores.Combined(session.store, Transforms.records(session)) # steps as objects, linked to their elements, to query
 again = Transforms.Session(store, [Label, Size], earlier=session.steps)  # reuses decisions by key
 again.run(); again.orphans; Transforms.diff(session.steps, again.steps)  # run() alone takes only reused ones
 ```

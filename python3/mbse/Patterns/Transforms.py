@@ -25,8 +25,18 @@ parameters), so its ranking is a recommendation when the caller decides, and the
 A candidate no clause weighs is not the policy's to take. Resolution is linear: after each step, the candidates are
 found again, so taking one disables another that the step's rewrite made done.
 
+A step links the elements it matched and those its rewrite wrote, each in a role: a rewrite returns what it wrote, by
+role, as a mapping (`{"class": built}`; a `Map` in TypeScript), and any other value it returns is no record. `step.match` and `step.wrote` are `Link`s, each its role, its path and, within
+the session, the element itself; `session.wrote(element)` is the step that wrote an element. Each step is an object of
+`Transforms.Step`, whose adjacencies `matched` and `wrote` are entries of the relations `Transforms.Matched` and
+`Transforms.Wrote`, each linking the step to an element, with its role and path, and `steps`, of `Transforms.Within`,
+a composite's own steps; `records(session)` is a store whose singleton `Transforms.Records` holds the steps taken, so
+that predicates query them, combined with the session's store, as any other data.
+
 `session.trace(store)` writes the steps taken as data, a `Transforms.Trace` object in a store that `register` prepared,
-which JSON and YAML write byte-identically in both implementations; `steps(store, trace)` reads them back.
+which JSON and YAML write byte-identically in both implementations; `steps(store, trace)` reads them back. A trace
+names elements by path alone, so that it holds no element itself: what a step matched by its path when the session
+first saw it, what it wrote by its path when the trace is written, since later steps may move it.
 
 A rerun reuses decisions. A step's `key` is its transform and its match's paths (`Label(i=Shelf/items[0])`); a session
 given `earlier` steps takes, before any policy, each candidate an earlier step with its key decided with the same
@@ -42,14 +52,14 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from mbse.Schemas.Framework import Paths, Plain, Schemas, Visitors
+from mbse.Schemas.Framework import Bindings, Paths, Plain, Schemas, Visitors
 
 from . import Predicates, Queries
 
-__all__ = ["Transform", "Candidate", "Session", "Policy", "Clause", "Step", "Diff", "diff", "steps", "TRACE", "Trace",
-           "register"]
+__all__ = ["Transform", "Candidate", "Session", "Policy", "Clause", "Step", "Link", "Diff", "diff", "steps", "TRACE",
+           "Trace", "register", "records", "RECORDS", "Matched", "Wrote", "Within", "StepObject", "Records"]
 
-TRACE = "Transforms.Trace"
+TRACE, RECORDS = "Transforms.Trace", "Transforms.Records"
 
 Rewrite = Callable[[Any, dict[str, Visitors.Visitable], dict[str, Any]], Any]
 
@@ -164,21 +174,45 @@ class Policy:
 
 
 @dataclass(frozen=True)
+class Link:
+    """A step's link to an element, in a role: a symbol of its match, or a role its rewrite wrote it in. Within the
+    session, `element` is the element itself; `path` names it (mbse-schemas' `Paths`), as a trace writes it, and is
+    None for what a step wrote until a trace is written. Links compare by role and path."""
+
+    role: str
+    path: str | None = None
+    element: Any = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
 class Step:
-    """A step taken: its transform's name, its match by paths, its arguments, who decided it, and a composite's mode and
-    own steps."""
+    """A step taken: its transform's name, its match, its arguments, who decided it, a composite's mode and own steps,
+    and what it wrote. An object of `Transforms.Step`; steps compare by what they hold."""
 
     transform: str
-    match: tuple[tuple[str, str], ...]
+    match: tuple[Link, ...]
     arguments: tuple[tuple[str, Any], ...]
     by: str
     mode: str | None = None
     steps: tuple[Step, ...] = ()
+    wrote: tuple[Link, ...] = ()
 
     @property
     def key(self) -> str:
         """The choice it decided: its transform and its match, `Dataclass(s=Contact)`."""
-        return f"{self.transform}({', '.join(f'{symbol}={path}' for symbol, path in self.match)})"
+        return f"{self.transform}({', '.join(f'{link.role}={link.path}' for link in self.match)})"
+
+    def identity(self) -> int:
+        return id(self)
+
+    def schema_name(self) -> str:
+        return StepObject.name  # type: ignore[return-value]
+
+    def owner(self) -> None:
+        return None
+
+    def accept(self, visitor: Any) -> None:
+        Bindings.accept(_STEP, self, visitor)
 
 
 class _Labels:
@@ -215,13 +249,13 @@ class Session:
         self._earlier = {step.key: step for step in earlier}
         self.steps: list[Step] = []
         self.undecided: list[str] = []
-        self._child: tuple[Candidate, Session, str, str, tuple[tuple[str, str], ...]] | None = None
+        self._child: tuple[Candidate, Session, str, str, tuple[Link, ...]] | None = None
         self._candidates = self._enabled()
 
     # --- Matches and candidates ---
 
-    def _paths(self, match: Mapping[str, Visitors.Visitable]) -> tuple[tuple[str, str], ...]:
-        return tuple((symbol, self._labels.of(value)[0]) for symbol, value in match.items())
+    def _links(self, match: Mapping[str, Visitors.Visitable]) -> tuple[Link, ...]:
+        return tuple(Link(symbol, self._labels.of(value)[0], value) for symbol, value in match.items())
 
     def _enabled(self) -> list[Candidate]:
         evaluate = Predicates.Evaluator(self.store)
@@ -235,7 +269,7 @@ class Session:
             for match in Queries.select(self.store, transform.before, unknown=True):
                 if any(match[symbol] is not value for symbol, value in self._scope.items() if symbol in match):
                     continue
-                where = ", ".join(f"{symbol}={path}" for symbol, path in self._paths(match))
+                where = ", ".join(f"{link.role}={link.path}" for link in self._links(match))
                 before, after = _holds(evaluate, transform.before, match), _holds(evaluate, transform.after, match)
                 if before is None or after is None:
                     which = "before" if before is None else "after"
@@ -260,11 +294,11 @@ class Session:
         """Records an open composite whose session is done; refuses to go on while it is not."""
         if self._child is None:
             return
-        candidate, child, mode, by, paths = self._child
+        candidate, child, mode, by, links = self._child
         if not child.done:
             raise ValueError(f"{candidate.transform.name!r} is open: take its steps first")
         self._child = None
-        self._finish(candidate, paths, by, mode, tuple(child.steps))
+        self._finish(candidate, links, by, mode, tuple(child.steps))
 
     def _find(self, candidate: Candidate) -> Candidate:
         found = next((c for c in self._candidates if c.same(candidate)), None)
@@ -274,14 +308,15 @@ class Session:
 
     # --- Steps ---
 
-    def _finish(self, candidate: Candidate, paths: tuple[tuple[str, str], ...], by: str, mode: str | None,
-                steps: tuple[Step, ...]) -> None:
+    def _finish(self, candidate: Candidate, links: tuple[Link, ...], by: str, mode: str | None,
+                steps: tuple[Step, ...], wrote: Any = None) -> None:
         """Checks that the step established its after, records it, and finds the candidates again."""
         if _holds(Predicates.Evaluator(self.store), candidate.transform.after, candidate.match) is not True:
-            where = ", ".join(f"{symbol}={path}" for symbol, path in paths)
+            where = ", ".join(f"{link.role}={link.path}" for link in links)
             raise ValueError(f"{candidate.transform.name!r} did not establish its after at {where}")
         arguments = tuple((name, candidate.arguments[name]) for name in candidate.transform.parameters)
-        step = Step(candidate.transform.name, paths, arguments, by, mode, steps)
+        written = tuple(Link(role, None, element) for role, element in (wrote.items() if isinstance(wrote, Mapping) else ()))
+        step = Step(candidate.transform.name, links, arguments, by, mode, steps, written)
         self._earlier.pop(step.key, None)  # decided now, whoever decided it
         self.steps.append(step)
         self._candidates = self._enabled()
@@ -292,9 +327,9 @@ class Session:
         if candidate.transform.parts:
             raise TypeError(f"{candidate.transform.name!r} is composite: step in or over it")
         self._find(candidate)
-        paths = self._paths(candidate.match)
-        candidate.transform.rewrite(self.store, dict(candidate.match), dict(candidate.arguments))  # type: ignore[misc]
-        self._finish(candidate, paths, by, None, ())
+        links = self._links(candidate.match)
+        wrote = candidate.transform.rewrite(self.store, dict(candidate.match), dict(candidate.arguments))  # type: ignore[misc]
+        self._finish(candidate, links, by, None, (), wrote)
 
     def take(self, candidate: Candidate) -> None:
         """Takes a candidate, as the caller decides: applies its rewrite and records the step."""
@@ -315,11 +350,11 @@ class Session:
         earlier = self._earlier.get(self._key_of(candidate))
         child = Session(self.store, candidate.transform.parts, {**self._scope, **candidate.match}, self._labels,
                         earlier.steps if earlier is not None else ())
-        self._child = (candidate, child, mode, by, self._paths(candidate.match))
+        self._child = (candidate, child, mode, by, self._links(candidate.match))
         return child
 
     def _key_of(self, candidate: Candidate) -> str:
-        return Step(candidate.transform.name, self._paths(candidate.match), (), "").key
+        return Step(candidate.transform.name, self._links(candidate.match), (), "").key
 
     def _reusable(self) -> Candidate | None:
         """The first candidate, in order, that an earlier decision with its key decided, its open parameters answered as
@@ -384,9 +419,30 @@ class Session:
 
     # --- The trace ---
 
+    def wrote(self, element: Visitors.Visitable) -> Step | None:
+        """The step that wrote `element`, a composite's own steps included, or None."""
+        return next((step for step in _all(self.steps) if any(link.element is element for link in step.wrote)), None)
+
     def trace(self, store: Any) -> Any:
-        """The steps taken, as a `Transforms.Trace` object built in `store` (see `register`)."""
-        return Plain.FromPlain(store)(Trace, {"root": "s0", "objects": {"s0": {"steps": [_plain(s) for s in self.steps]}}})
+        """The steps taken, as a `Transforms.Trace` object built in `store` (see `register`), what each wrote by its path
+        now."""
+        paths = Paths.of(self.store)
+        return Plain.FromPlain(store)(Trace, {"root": "s0", "objects": {"s0": {"steps": [
+            _plain(s, paths) for s in self.steps]}}})
+
+
+def _all(steps: Iterable[Step]) -> Iterable[Step]:
+    for step in steps:
+        yield step
+        yield from _all(step.steps)
+
+
+def _path(paths: Any, link: Link) -> str | None:
+    """What a step wrote, by its path now; None where the store no longer reaches it."""
+    try:
+        return paths.of(link.element)  # type: ignore[no-any-return]
+    except LookupError:
+        return None
 
 
 def _native(name: str, value: Any) -> dict[str, Any]:
@@ -396,16 +452,19 @@ def _native(name: str, value: Any) -> dict[str, Any]:
     return {native.token.name: native.to_plain(value)}
 
 
-def _plain(step: Step) -> dict[str, Any]:
+def _plain(step: Step, paths: Any) -> dict[str, Any]:
     plain: dict[str, Any] = {"transform": step.transform,
-                             "match": [{"symbol": symbol, "element": path} for symbol, path in step.match]}
+                             "match": [{"symbol": link.role, "element": link.path} for link in step.match]}
+    if step.wrote:
+        plain["wrote"] = [{"role": link.role, **({} if path is None else {"element": path})}
+                          for link in step.wrote for path in [_path(paths, link)]]
     if step.arguments:
         plain["arguments"] = [{"name": name, "value": _native(name, value)} for name, value in step.arguments]
     plain["by"] = step.by
     if step.mode is not None:
         plain["mode"] = step.mode
     if step.steps:
-        plain["steps"] = [_plain(inner) for inner in step.steps]
+        plain["steps"] = [_plain(inner, paths) for inner in step.steps]
     return plain
 
 
@@ -418,15 +477,18 @@ def _list(name: str, item: Any) -> Schemas.OfProperty.Spec:
 
 
 _Binding = Schemas.OfObject.Builder().properties(_text("symbol"), _text("element")).create()
+_Written = Schemas.OfObject.Builder().properties(_text("role"), _text("element")).create()
 _Argument = Schemas.OfObject.Builder().properties(_text("name"), lambda p: p.name("value").of(Schemas.Form.Value)).create()
 StepSchema = Schemas.OfObject.Builder().properties(
-    _text("transform"), _list("match", _Binding), _list("arguments", _Argument), _text("by"), _text("mode")).create()
+    _text("transform"), _list("match", _Binding), _list("wrote", _Written), _list("arguments", _Argument), _text("by"),
+    _text("mode")).create()
 Schemas.OfObject.Builder(StepSchema).properties(_list("steps", StepSchema)).update()
 
 Trace = Schemas.OfObject.Builder().name(TRACE).ref().properties(_list("steps", StepSchema)).create()
 """The schema of a trace: its steps in order, each its transform's name, its match (each symbol and its object, by its
-path, `Shelf/items[0]`), its arguments by name, who decided it (`caller`, `policy` or `reused`), and, for a composite,
-whether the caller stepped `in` or `over` it and its own steps."""
+path, `Shelf/items[0]`), what it wrote (each role and its object's path, where the store still reaches it), its
+arguments by name, who decided it (`caller`, `policy` or `reused`), and, for a composite, whether the caller stepped
+`in` or `over` it and its own steps."""
 
 
 def steps(store: Any, trace: Any) -> list[Step]:
@@ -437,8 +499,9 @@ def steps(store: Any, trace: Any) -> list[Step]:
 
 def _step(plain: dict[str, Any]) -> Step:
     arguments = tuple((a["name"], _value(a["value"])) for a in plain.get("arguments", []))
-    return Step(plain["transform"], tuple((b["symbol"], b["element"]) for b in plain["match"]), arguments, plain["by"],
-                plain.get("mode"), tuple(_step(inner) for inner in plain.get("steps", [])))
+    return Step(plain["transform"], tuple(Link(b["symbol"], b["element"]) for b in plain["match"]), arguments, plain["by"],
+                plain.get("mode"), tuple(_step(inner) for inner in plain.get("steps", [])),
+                tuple(Link(w["role"], w.get("element")) for w in plain.get("wrote", [])))
 
 
 def _value(plain: dict[str, Any]) -> Any:
@@ -474,6 +537,98 @@ def diff(earlier: Iterable[Step], later: Iterable[Step]) -> Diff:
                 tuple(step for key, step in before.items() if key not in after),
                 tuple((before[key], step) for key, step in after.items()
                       if key in before and not _same_arguments(before[key], step)))
+
+
+# --- Steps as objects ---
+
+def _linked(name: str) -> Schemas.OfRelation.Data:
+    return Schemas.OfRelation.Builder().name(name).links("step", "element").properties(_text("role"), _text("path")).create()
+
+
+Matched = _linked("Transforms.Matched")
+"""A step's link to an element it matched, in the role of a symbol, with the element's path."""
+Wrote = _linked("Transforms.Wrote")
+"""A step's link to an element its rewrite wrote, in the role the rewrite gave it, with its path once written."""
+Within = Schemas.OfRelation.Builder().name("Transforms.Within").links("composite", "step").create()
+"""A composite step's link to each of its own steps, in order."""
+_Taken = Schemas.OfRelation.Builder().name("Transforms.Taken").links("records", "step").create()
+StepObject = Schemas.OfObject.Builder().name("Transforms.Step").ref().properties(
+    _text("transform"), _list("arguments", _Argument), _text("by"), _text("mode")).relations(
+    lambda r: r.name("matched").of(Matched).me("step"), lambda r: r.name("wrote").of(Wrote).me("step"),
+    lambda r: r.name("steps").of(Within).me("composite")).create()
+"""A step as an object: its transform's name, its arguments, who decided it and a composite's mode; the elements it
+matched and wrote, and a composite's own steps."""
+Records = Schemas.OfObject.Builder().name(RECORDS).ref().singleton(RECORDS).relations(
+    lambda r: r.name("steps").of(_Taken).me("records")).create()
+"""The steps a session took, in order: the root of `records(session)`."""
+
+
+def _entries(links: tuple[Link, ...]) -> list[Bindings.Entry]:
+    return [Bindings.Entry({"element": link.element}, {"role": link.role, **({} if link.path is None else {"path": link.path})})
+            for link in links]
+
+
+def _links_of(entries: list[Bindings.Entry]) -> tuple[Link, ...]:
+    return tuple(Link(e.properties["role"], e.properties.get("path"), e.links["element"]) for e in entries)
+
+
+def _step_state(step: Step) -> Bindings.State:
+    values: dict[str, Any] = {"transform": step.transform, "by": step.by}
+    if step.arguments:
+        values["arguments"] = [{"name": name, "value": _native(name, value)} for name, value in step.arguments]
+    if step.mode is not None:
+        values["mode"] = step.mode
+    return Bindings.State(values, {"matched": _entries(step.match), "wrote": _entries(step.wrote),
+                                   "steps": [Bindings.Entry({"step": inner}) for inner in step.steps]})
+
+
+def _step_of(state: Bindings.State) -> Step:
+    arguments = tuple((a["name"], _value(a["value"])) for a in state.values.get("arguments", []))
+    return Step(state.values.get("transform", ""), _links_of(state.entries.get("matched", [])), arguments,
+                state.values.get("by", ""), state.values.get("mode"),
+                tuple(e.links["step"] for e in state.entries.get("steps", [])), _links_of(state.entries.get("wrote", [])))
+
+
+_STEP = Bindings.Binding(StepObject, _step_state, _step_of)
+
+
+class _Records:
+    """The root of `records(session)`: the steps a session took, in order."""
+
+    def __init__(self) -> None:
+        self.steps: list[Step] = []
+
+    def identity(self) -> int:
+        return id(self)
+
+    def schema_name(self) -> str:
+        return RECORDS
+
+    def owner(self) -> None:
+        return None
+
+    def accept(self, visitor: Any) -> None:
+        Bindings.accept(_RECORDS, self, visitor)
+
+
+def _made(state: Bindings.State) -> _Records:
+    made = _Records()
+    made.steps = [e.links["step"] for e in state.entries.get("steps", [])]
+    return made
+
+
+_RECORDS = Bindings.Binding(Records, lambda r: Bindings.State({}, {"steps": [Bindings.Entry({"step": s}) for s in r.steps]}),
+                            _made)
+
+
+def records(session: Session) -> Bindings.OfStore:
+    """The steps `session` took, as objects of a store whose singleton `Transforms.Records` holds them in order; combined
+    with the session's store (mbse-schemas' `Stores.Combined`), predicates query them and the elements they link."""
+    store = Bindings.OfStore([(StepObject, lambda instance=None: Bindings.Builder(_STEP, instance)),
+                              (Records, lambda instance=None: Bindings.Builder(_RECORDS, instance))],
+                             [Matched, Wrote, Within, _Taken])
+    store.singleton(RECORDS).steps = list(session.steps)
+    return store
 
 
 def register(store: Any) -> Any:

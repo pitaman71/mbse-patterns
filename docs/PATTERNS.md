@@ -322,6 +322,13 @@ rebuild, reversibility, pipelines).
 - **The trace** is data: `session.trace(Transforms.register(store))` builds a `Transforms.Trace`, its steps in order,
   each its transform, match, arguments, who decided it, and a composite's mode (`in`, `over`) and own steps;
   `Transforms.steps(store, trace)` reads them back.
+- **Steps link what they matched and wrote** (0.9), each in a role: a rewrite returns what it wrote, by role
+  (`{"box": box}`; a `Map` in TypeScript), and `step.match` and `step.wrote` are `Transforms.Link`s, each its role,
+  its path and, within the session, the element itself; `session.wrote(element)` is the step that wrote it. A step is
+  an object of `Transforms.Step`, linked by the relations `Transforms.Matched` and `Transforms.Wrote`, and
+  `Transforms.records(session)` a store of the steps, which predicates query combined with the session's store. A
+  written trace names what a step wrote by its path when written: `"wrote": [{"role": "box", "element":
+  "Shelf/items[0]"}]`.
 - **Reruns reuse decisions** (0.8). A step's key is its transform and its match's paths (`Label(i=Shelf/items[0])`).
   `Session(store, transforms, earlier=steps)` takes, before any policy, each candidate an earlier step with its key
   decided, with the same arguments, as `reused` (a composite's own steps too); `run()` without a policy takes only

@@ -27,8 +27,19 @@
  * when the caller steps over. A candidate no clause weighs is not the policy's to take. Resolution is linear: after each
  * step, the candidates are found again, so taking one disables another that the step's rewrite made done.
  *
+ * A step links the elements it matched and those its rewrite wrote, each in a role: a rewrite returns what it wrote, by
+ * role, as a `Map` (`new Map([["class", built]])`; a mapping in Python), and any other value it returns is no record.
+ * `step.match` and `step.wrote` are `Link`s, each its role, its path and, within the session, the element itself;
+ * `session.wrote(element)` is the step that wrote an element. Each step is an object of `Transforms.Step`, whose
+ * adjacencies `matched` and `wrote` are entries of the relations `Transforms.Matched` and `Transforms.Wrote`, each
+ * linking the step to an element, with its role and path, and `steps`, of `Transforms.Within`, a composite's own steps;
+ * `records(session)` is a store whose singleton `Transforms.Records` holds the steps taken, so that predicates query
+ * them, combined with the session's store, as any other data.
+ *
  * `session.trace(store)` writes the steps taken as data, a `Transforms.Trace` object in a store that `register`
  * prepared, which JSON and YAML write byte-identically in both implementations; `steps(store, trace)` reads them back.
+ * A trace names elements by path alone, so that it holds no element itself: what a step matched by its path when the
+ * session first saw it, what it wrote by its path when the trace is written, since later steps may move it.
  *
  * A rerun reuses decisions. A step's `key` is its transform and its match's paths (`Label(i=Shelf/items[0])`); a
  * session given `earlier` steps takes, before any policy, each candidate an earlier step with its key decided with the
@@ -38,7 +49,7 @@
  * key.
  */
 
-import { Paths, Plain, Schemas } from "@mbse/schemas/Framework";
+import { Bindings, Paths, Plain, Schemas } from "@mbse/schemas/Framework";
 import { ValueError } from "@mbse/schemas/Framework/Errors";
 import type { PlainData, PlainMap } from "@mbse/schemas/Framework/Plain";
 import { repr } from "@mbse/schemas/Framework/Repr";
@@ -48,6 +59,7 @@ import * as Predicates from "./Predicates.js";
 import * as Queries from "./Queries.js";
 
 export const TRACE = "Transforms.Trace";
+export const RECORDS = "Transforms.Records";
 
 /** Each symbol's object. */
 export type Match = Record<string, Visitable>;
@@ -185,19 +197,54 @@ export class Policy {
   }
 }
 
-/** A step taken: its transform's name, its match by paths, its arguments, who decided it, and a composite's mode and
- * own steps. */
+/** A step's link to an element, in a role: a symbol of its match, or a role its rewrite wrote it in. Within the session,
+ * `element` is the element itself; `path` names it (mbse-schemas' `Paths`), as a trace writes it, and is null for what
+ * a step wrote until a trace is written. Links compare by role and path. */
+export class Link {
+  readonly #element: unknown;
+
+  constructor(readonly role: string, readonly path: string | null = null, element: unknown = null) {
+    this.#element = element;
+  }
+
+  get element(): any {
+    return this.#element;
+  }
+}
+
+let stepCount = 0;
+
+/** A step taken: its transform's name, its match, its arguments, who decided it, a composite's mode and own steps, and
+ * what it wrote. An object of `Transforms.Step`; steps compare by what they hold. */
 export class Step {
   readonly arguments: readonly [string, unknown][];
+  readonly #identity = `step ${++stepCount}`;
 
-  constructor(readonly transform: string, readonly match: readonly [string, string][], args: readonly [string, unknown][],
-    readonly by: string, readonly mode: string | null = null, readonly steps: readonly Step[] = []) {
+  constructor(readonly transform: string, readonly match: readonly Link[], args: readonly [string, unknown][],
+    readonly by: string, readonly mode: string | null = null, readonly steps: readonly Step[] = [],
+    readonly wrote: readonly Link[] = []) {
     this.arguments = args;
   }
 
   /** The choice it decided: its transform and its match, `Dataclass(s=Contact)`. */
   get key(): string {
-    return `${this.transform}(${this.match.map(([symbol, path]) => `${symbol}=${path}`).join(", ")})`;
+    return `${this.transform}(${this.match.map((link) => `${link.role}=${link.path}`).join(", ")})`;
+  }
+
+  identity(): string {
+    return this.#identity;
+  }
+
+  schema_name(): string {
+    return StepObject.name as string;
+  }
+
+  owner(): null {
+    return null;
+  }
+
+  accept(visitor: unknown): void {
+    Bindings.accept(STEP, this, visitor as never);
   }
 }
 
@@ -233,7 +280,7 @@ export class Session {
   readonly #scope: Match;
   readonly #labels: Labels;
   readonly #earlier: Map<string, Step>;
-  #child: { candidate: Candidate; session: Session; mode: string; by: string; paths: [string, string][] } | null = null;
+  #child: { candidate: Candidate; session: Session; mode: string; by: string; links: Link[] } | null = null;
   #candidates: Candidate[];
 
   constructor(readonly store: any, transforms: Iterable<Transform>, scope: Match = {}, labels: Labels | null = null,
@@ -249,8 +296,8 @@ export class Session {
 
   // --- Matches and candidates ---
 
-  private paths(match: Match): [string, string][] {
-    return Object.entries(match).map(([symbol, value]) => [symbol, this.#labels.of(value)[0]]);
+  private links(match: Match): Link[] {
+    return Object.entries(match).map(([symbol, value]) => new Link(symbol, this.#labels.of(value)[0], value));
   }
 
   private enabled(): Candidate[] {
@@ -264,7 +311,7 @@ export class Session {
       const open = [...transform.parameters.keys()].filter((name) => domains.get(name) === null);
       for (const match of Queries.select(this.store, transform.before, null, true)) {
         if (Object.entries(this.#scope).some(([symbol, value]) => symbol in match && match[symbol] !== value)) continue;
-        const where = this.paths(match).map(([symbol, path]) => `${symbol}=${path}`).join(", ");
+        const where = this.links(match).map((link) => `${link.role}=${link.path}`).join(", ");
         const [before, after] = [holds(evaluate, transform.before, match), holds(evaluate, transform.after, match)];
         if (before === null || after === null) {
           this.undecided.push(`${repr(transform.name)} at ${where}: its ${before === null ? "before" : "after"} is unknown`);
@@ -292,10 +339,10 @@ export class Session {
   /** Records an open composite whose session is done; refuses to go on while it is not. */
   private closed(): void {
     if (this.#child === null) return;
-    const { candidate, session, mode, by, paths } = this.#child;
+    const { candidate, session, mode, by, links } = this.#child;
     if (!session.done) throw new ValueError(`${repr(candidate.transform.name)} is open: take its steps first`);
     this.#child = null;
-    this.finish(candidate, paths, by, mode, [...session.steps]);
+    this.finish(candidate, links, by, mode, [...session.steps]);
   }
 
   private find(candidate: Candidate): Candidate {
@@ -307,13 +354,14 @@ export class Session {
   // --- Steps ---
 
   /** Checks that the step established its after, records it, and finds the candidates again. */
-  private finish(candidate: Candidate, paths: [string, string][], by: string, mode: string | null, steps: Step[]): void {
+  private finish(candidate: Candidate, links: Link[], by: string, mode: string | null, steps: Step[], wrote: unknown = null): void {
     if (holds(new Predicates.Evaluator(this.store), candidate.transform.after, candidate.match) !== true) {
-      const where = paths.map(([symbol, path]) => `${symbol}=${path}`).join(", ");
+      const where = links.map((link) => `${link.role}=${link.path}`).join(", ");
       throw new ValueError(`${repr(candidate.transform.name)} did not establish its after at ${where}`);
     }
     const args = [...candidate.transform.parameters.keys()].map((name) => [name, candidate.arguments[name]] as [string, unknown]);
-    const step = new Step(candidate.transform.name, paths, args, by, mode, steps);
+    const written = wrote instanceof Map ? [...wrote].map(([role, element]) => new Link(role as string, null, element)) : [];
+    const step = new Step(candidate.transform.name, links, args, by, mode, steps, written);
     this.#earlier.delete(step.key); // decided now, whoever decided it
     this.steps.push(step);
     this.#candidates = this.enabled();
@@ -323,9 +371,9 @@ export class Session {
     if (candidate.open.length > 0) throw new ValueError(`${repr(candidate.transform.name)} has open parameters ${repr(candidate.open)}`);
     if (candidate.transform.parts.length > 0) throw new TypeError(`${repr(candidate.transform.name)} is composite: step in or over it`);
     this.find(candidate);
-    const paths = this.paths(candidate.match);
-    (candidate.transform.rewrite as Rewrite)(this.store, { ...candidate.match }, { ...candidate.arguments });
-    this.finish(candidate, paths, by, null, []);
+    const links = this.links(candidate.match);
+    const wrote = (candidate.transform.rewrite as Rewrite)(this.store, { ...candidate.match }, { ...candidate.arguments });
+    this.finish(candidate, links, by, null, [], wrote);
   }
 
   /** Takes a candidate, as the caller decides: applies its rewrite and records the step. */
@@ -347,12 +395,12 @@ export class Session {
     const earlier = this.#earlier.get(this.keyOf(candidate));
     const session = new Session(this.store, candidate.transform.parts, { ...this.#scope, ...candidate.match }, this.#labels,
       earlier !== undefined ? earlier.steps : []);
-    this.#child = { candidate, session, mode, by, paths: this.paths(candidate.match) };
+    this.#child = { candidate, session, mode, by, links: this.links(candidate.match) };
     return session;
   }
 
   private keyOf(candidate: Candidate): string {
-    return new Step(candidate.transform.name, this.paths(candidate.match), [], "").key;
+    return new Step(candidate.transform.name, this.links(candidate.match), [], "").key;
   }
 
   /** The first candidate, in order, that an earlier decision with its key decided, its open parameters answered as
@@ -420,10 +468,30 @@ export class Session {
 
   // --- The trace ---
 
-  /** The steps taken, as a `Transforms.Trace` object built in `store` (see `register`). */
+  /** The step that wrote `element`, a composite's own steps included, or null. */
+  wrote(element: unknown): Step | null {
+    return all(this.steps).find((step) => step.wrote.some((link) => link.element === element)) ?? null;
+  }
+
+  /** The steps taken, as a `Transforms.Trace` object built in `store` (see `register`), what each wrote by its path
+   * now. */
   trace(store: any): unknown {
-    const root = new Map<string, PlainData>([["steps", this.steps.map(plain)]]);
+    const paths = Paths.of(this.store);
+    const root = new Map<string, PlainData>([["steps", this.steps.map((step) => plain(step, paths))]]);
     return Plain.FromPlain(store)(Trace, new Map<string, PlainData>([["root", "s0"], ["objects", new Map([["s0", root]])]]));
+  }
+}
+
+function all(steps: readonly Step[]): Step[] {
+  return steps.flatMap((step) => [step, ...all(step.steps)]);
+}
+
+/** What a step wrote, by its path now; null where the store no longer reaches it. */
+function pathOf(paths: Paths.Paths, link: Link): string | null {
+  try {
+    return paths.of(link.element);
+  } catch { // a LookupError, the one error a path's lookup throws
+    return null;
   }
 }
 
@@ -442,15 +510,21 @@ function native(name: string, value: unknown): PlainMap {
   return new Map([[(schema.token as Schemas.OfNative.Token).name, schema.to_plain(value)]]);
 }
 
-function plain(step: Step): PlainMap {
+function plain(step: Step, paths: Paths.Paths): PlainMap {
   const out = new Map<string, PlainData>([["transform", step.transform],
-    ["match", step.match.map(([symbol, path]) => new Map<string, PlainData>([["symbol", symbol], ["element", path]]))]]);
+    ["match", step.match.map((link) => new Map<string, PlainData>([["symbol", link.role], ["element", link.path as string]]))]]);
+  if (step.wrote.length > 0) {
+    out.set("wrote", step.wrote.map((link) => {
+      const path = pathOf(paths, link);
+      return new Map<string, PlainData>([["role", link.role], ...(path === null ? [] : [["element", path] as [string, PlainData]])]);
+    }));
+  }
   if (step.arguments.length > 0) {
     out.set("arguments", step.arguments.map(([name, value]) => new Map<string, PlainData>([["name", name], ["value", native(name, value)]])));
   }
   out.set("by", step.by);
   if (step.mode !== null) out.set("mode", step.mode);
-  if (step.steps.length > 0) out.set("steps", step.steps.map(plain));
+  if (step.steps.length > 0) out.set("steps", step.steps.map((inner) => plain(inner, paths)));
   return out;
 }
 
@@ -459,14 +533,17 @@ const list = (name: string, item: Schemas.OfAny.Spec) =>
   (p: Schemas.OfProperty.Builder) => p.name(name).of((t) => t.as_indexed((i) => i.of(item)));
 
 const Binding = new Schemas.OfObject.Builder().properties(text("symbol"), text("element")).create();
+const Written = new Schemas.OfObject.Builder().properties(text("role"), text("element")).create();
 const Argument = new Schemas.OfObject.Builder().properties(text("name"), (p) => p.name("value").of(Schemas.Form.Value)).create();
 const StepSchema = new Schemas.OfObject.Builder().properties(
-  text("transform"), list("match", Binding), list("arguments", Argument), text("by"), text("mode")).create();
+  text("transform"), list("match", Binding), list("wrote", Written), list("arguments", Argument), text("by"),
+  text("mode")).create();
 new Schemas.OfObject.Builder(StepSchema).properties(list("steps", StepSchema)).update();
 
 /** The schema of a trace: its steps in order, each its transform's name, its match (each symbol and its object, by its
- * path, `Shelf/items[0]`), its arguments by name, who decided it (`caller`, `policy` or `reused`), and, for a composite,
- * whether the caller stepped `in` or `over` it and its own steps. */
+ * path, `Shelf/items[0]`), what it wrote (each role and its object's path, where the store still reaches it), its
+ * arguments by name, who decided it (`caller`, `policy` or `reused`), and, for a composite, whether the caller stepped
+ * `in` or `over` it and its own steps. */
 export const Trace = new Schemas.OfObject.Builder().name(TRACE).ref().properties(list("steps", StepSchema)).create();
 
 /** The steps a `Transforms.Trace` object in `store` holds, as a session took them. */
@@ -480,8 +557,10 @@ function stepOf(plain: PlainMap): Step {
   const args = ((plain.get("arguments") as PlainMap[] | undefined) ?? []).map(
     (a) => [a.get("name") as string, valueOf(a.get("value") as PlainMap)] as [string, unknown]);
   return new Step(plain.get("transform") as string, (plain.get("match") as PlainMap[]).map(
-    (b) => [b.get("symbol") as string, b.get("element") as string] as [string, string]), args, plain.get("by") as string,
-    (plain.get("mode") as string | undefined) ?? null, ((plain.get("steps") as PlainMap[] | undefined) ?? []).map(stepOf));
+    (b) => new Link(b.get("symbol") as string, b.get("element") as string)), args, plain.get("by") as string,
+    (plain.get("mode") as string | undefined) ?? null, ((plain.get("steps") as PlainMap[] | undefined) ?? []).map(stepOf),
+    ((plain.get("wrote") as PlainMap[] | undefined) ?? []).map(
+      (w) => new Link(w.get("role") as string, (w.get("element") as string | undefined) ?? null)));
 }
 
 function valueOf(plain: PlainMap): unknown {
@@ -523,3 +602,97 @@ export function register<S extends { names(): Iterable<string>; register(schema:
   return store;
 }
 
+// --- Steps as objects ---
+
+function linked(name: string): Schemas.OfRelation.Data {
+  return new Schemas.OfRelation.Builder().name(name).links("step", "element").properties(text("role"), text("path")).create();
+}
+
+/** A step's link to an element it matched, in the role of a symbol, with the element's path. */
+export const Matched = linked("Transforms.Matched");
+/** A step's link to an element its rewrite wrote, in the role the rewrite gave it, with its path once written. */
+export const Wrote = linked("Transforms.Wrote");
+/** A composite step's link to each of its own steps, in order. */
+export const Within = new Schemas.OfRelation.Builder().name("Transforms.Within").links("composite", "step").create();
+const Taken = new Schemas.OfRelation.Builder().name("Transforms.Taken").links("records", "step").create();
+/** A step as an object: its transform's name, its arguments, who decided it and a composite's mode; the elements it
+ * matched and wrote, and a composite's own steps. */
+export const StepObject = new Schemas.OfObject.Builder().name("Transforms.Step").ref().properties(
+  text("transform"), list("arguments", Argument), text("by"), text("mode")).relations(
+  (r) => r.name("matched").of(Matched).me("step"), (r) => r.name("wrote").of(Wrote).me("step"),
+  (r) => r.name("steps").of(Within).me("composite")).create();
+/** The steps a session took, in order: the root of `records(session)`. */
+export const Records = new Schemas.OfObject.Builder().name(RECORDS).ref().singleton(RECORDS).relations(
+  (r) => r.name("steps").of(Taken).me("records")).create();
+
+function entries(links: readonly Link[]): Bindings.Entry[] {
+  return links.map((link) => new Bindings.Entry(new Map([["element", link.element]]),
+    new Map<string, unknown>([["role", link.role], ...(link.path === null ? [] : [["path", link.path] as [string, unknown]])])));
+}
+
+function linksOf(found: Bindings.Entry[] | undefined): Link[] {
+  return (found ?? []).map((e) => new Link(e.properties.get("role") as string, (e.properties.get("path") as string | undefined) ?? null,
+    e.links.get("element")));
+}
+
+function stepState(step: Step): Bindings.State {
+  const values = new Map<string, unknown>([["transform", step.transform], ["by", step.by]]);
+  if (step.arguments.length > 0) {
+    values.set("arguments", step.arguments.map(([name, value]) => new Map<string, PlainData>([["name", name], ["value", native(name, value)]])));
+  }
+  if (step.mode !== null) values.set("mode", step.mode);
+  return new Bindings.State(values, new Map([["matched", entries(step.match)], ["wrote", entries(step.wrote)],
+    ["steps", step.steps.map((inner) => new Bindings.Entry(new Map([["step", inner]])))]]));
+}
+
+function stepFrom(state: Bindings.State): Step {
+  const args = ((state.values.get("arguments") as PlainMap[] | undefined) ?? []).map(
+    (a) => [a.get("name") as string, valueOf(a.get("value") as PlainMap)] as [string, unknown]);
+  return new Step((state.values.get("transform") as string | undefined) ?? "", linksOf(state.entries.get("matched")), args,
+    (state.values.get("by") as string | undefined) ?? "", (state.values.get("mode") as string | undefined) ?? null,
+    (state.entries.get("steps") ?? []).map((e) => e.links.get("step") as Step), linksOf(state.entries.get("wrote")));
+}
+
+const STEP = new Bindings.Binding(StepObject, stepState, stepFrom);
+
+let recordsCount = 0;
+
+/** The root of `records(session)`: the steps a session took, in order. */
+class RecordsRoot {
+  steps: Step[] = [];
+  readonly #identity = `records ${++recordsCount}`;
+
+  identity(): string {
+    return this.#identity;
+  }
+
+  schema_name(): string {
+    return RECORDS;
+  }
+
+  owner(): null {
+    return null;
+  }
+
+  accept(visitor: unknown): void {
+    Bindings.accept(RECORDS_BINDING, this, visitor as never);
+  }
+}
+
+function made(state: Bindings.State): RecordsRoot {
+  const root = new RecordsRoot();
+  root.steps = (state.entries.get("steps") ?? []).map((e) => e.links.get("step") as Step);
+  return root;
+}
+
+const RECORDS_BINDING = new Bindings.Binding(Records, (root: RecordsRoot) => new Bindings.State(new Map(), new Map([["steps",
+  root.steps.map((step) => new Bindings.Entry(new Map([["step", step]])))]])), made);
+
+/** The steps `session` took, as objects of a store whose singleton `Transforms.Records` holds them in order; combined
+ * with the session's store (mbse-schemas' `Stores.Combined`), predicates query them and the elements they link. */
+export function records(session: Session): Bindings.OfStore {
+  const store = new Bindings.OfStore([[StepObject, (instance?: unknown) => new Bindings.Builder(STEP, instance)],
+    [Records, (instance?: unknown) => new Bindings.Builder(RECORDS_BINDING, instance)]], [Matched, Wrote, Within, Taken]);
+  (store.singleton(RECORDS) as RecordsRoot).steps = [...session.steps];
+  return store;
+}

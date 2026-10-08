@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mbse-patterns"
-version = "0.8.2"
+version = "0.9.0"
 description = "Constraints, queries and patterns over mbse-schemas data: constraints as constraints, validated and queried, and (later) populations to generate and characterize"
 keywords = ["constraints", "queries", "patterns", "validation", "mbse", "sysml", "interface", "test data"]
 readme = "README.md"

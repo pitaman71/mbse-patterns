@@ -209,9 +209,17 @@ Everything a session keeps is mbse-schemas data, in one store of the session, so
 - A step: a value object, its transform's name, its match (each symbol and its element's label), its arguments (each
   a native value, written as a form's attribute is: `{"name", "value": {"str": "upper"}}`), who decided it (`caller`
   or `policy`; `reused` comes with incremental rebuild), and, for a composite transform, whether the caller stepped
-  `in` or `over` and its inner steps, in a list. The core writes these; the relations below come later.
-- Relations from a step to elements: `Matched(step, element)` and `Wrote(step, element)`, each with the element's path;
-  and, where recorded, `Read(step, element)`, a fingerprint, and the step's effect as mutations.
+  `in` or `over` and its inner steps, in a list, and what it wrote (each role and its element's path).
+- Relations from a step to elements (built, 0.9): `Transforms.Matched(step, element)` and `Transforms.Wrote(step,
+  element)`, each with the element's role and path, and `Transforms.Within(composite, step)`. A step is an object of
+  `Transforms.Step`; `records(session)` is a store whose singleton `Transforms.Records` holds the steps taken, which,
+  combined with the session's store (mbse-schemas' `Stores.Combined`, which lets one store's objects link
+  another's), predicates query as any data. A rewrite returns what it wrote, by role (`{"class": built}`), so that a
+  role says what the element is to the step, not merely that it is new. Within the session a link is the element
+  itself; a trace written as data names it by its path alone, so that it holds no element: what a step matched by its
+  path when the session first saw it (the key's), what it wrote by its path when the trace is written, since a later
+  step may move it (a path is positional where the model names nothing, `Codegen.Output/modules[0]/children[2]`).
+  Still to come: `Read(step, element)`, a fingerprint, and the step's effect as mutations.
 - `Transforms.Trace`: a reference object holding the steps in order (built); the transforms' names and versions and the
   policies it ran with are to follow.
 - `Transforms.Policy`: clauses, each a transform, a guard (a predicate's name and arguments), preferences over
@@ -250,7 +258,8 @@ they can become one of their own, mbse-transforms, depending on this one.
    0.8, which TRF-07 tests): mbse-schemas' `ToDataclass` and `FromDataclass` as one invertible
    transform (schemas to Python's `ast` and back), which tests undo and inversion on a small, known case.
 3. **Diff and reused decisions** (built, 0.8): paths (mbse-schemas' `Paths`), keys, trace diffs, and reruns that
-   reuse decisions and report orphans. Source and explained target diffs wait on mbse-journals.
+   reuse decisions and report orphans; steps linked to what they matched and wrote, by role (0.9). Source and
+   explained target diffs wait on mbse-journals.
 4. **Incremental rebuild**: recorded reads, fingerprints and invalidation, tested against runs from scratch.
 5. **mbse-codegen-python**, then the other codegen repositories, each transform with its parameters documented, and
    the existing translators, transpilers and bridges rebuilt as transforms.
