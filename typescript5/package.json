@@ -22,7 +22,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "postinstall": "python3 ../scripts/siblings.py check && npm --prefix ../../mbse-schemas/typescript5 install --no-audit --no-fund && npm --prefix ../../mbse-expressions/typescript5 install --no-audit --no-fund",
+    "postinstall": "python3 ../../mbse-basis/scripts/polyrepo.py check && npm --prefix ../../mbse-schemas/typescript5 install --no-audit --no-fund && npm --prefix ../../mbse-expressions/typescript5 install --no-audit --no-fund",
     "typecheck": "tsc --noEmit",
     "test": "tsx tests/run-notebooks.ts --typecheck",
     "conformance": "tsx src/Conformance/write.ts",

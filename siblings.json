@@ -1,4 +1,8 @@
 {
+  "mbse-basis": {
+    "repository": "git@github.com:pitaman71/mbse-basis.git",
+    "commit": "84f47de81dfd1cb44647f239150be2e451f5df1f"
+  },
   "mbse-expressions": {
     "repository": "git@github.com:pitaman71/mbse-expressions.git",
     "version": "0.5.4",

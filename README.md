@@ -78,17 +78,18 @@ writers, and calls `Contains`'s condition with a variable.
 
 ## Getting started
 
-mbse-patterns depends on mbse-schemas and mbse-expressions, which live beside it as sibling checkouts. Clone this
-repository, then the siblings at the commits it pins (`siblings.json`):
+mbse-patterns depends on mbse-schemas and mbse-expressions, which live beside it as sibling checkouts. Clone mbse-basis,
+which keeps the tool, and this repository, then the siblings at the commits it pins (`siblings.json`):
 
 ```sh
+git clone git@github.com:pitaman71/mbse-basis.git
 git clone git@github.com:pitaman71/mbse-patterns.git
-python3 mbse-patterns/scripts/siblings.py clone   # mbse-schemas and mbse-expressions, beside it, pinned
 cd mbse-patterns
+python3 ../mbse-basis/scripts/polyrepo.py clone # mbse-schemas and mbse-expressions, beside it, pinned
 ```
 
-`scripts/siblings.py` runs the tool kept in mbse-schemas (cloning mbse-schemas first if it is missing); see
-`python3 scripts/siblings.py help` for `check`, `pin`, and workspaces for parallel work.
+The tool is kept in mbse-basis; see `python3 ../mbse-basis/scripts/polyrepo.py help` for `check`, `pin`, and workspaces
+for parallel work.
 
 Python (3.11+, managed with [uv](https://docs.astral.sh/uv/)):
 

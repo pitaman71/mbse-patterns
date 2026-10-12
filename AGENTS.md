@@ -35,10 +35,10 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
   the terms of `MBSE.md`; what it is comes after. Keep that opening true as the repository changes.
 - **Every human-facing document has navigation.** A `{previous, home, next}` line heads and ends each document in
   reading order (README, MBSE.md, tutorials, design, conformance, packages and test plans); after adding, renaming or
-  retitling one, run `python3 ../mbse-schemas/scripts/nav.py .`. Link text is human-readable, never a path.
+  retitling one, run `python3 ../mbse-basis/scripts/update_doc_links.py`. Link text is human-readable, never a path.
 - **Parallel work happens in workspaces.** Agents working at the same time each get a workspace from
-  `python3 scripts/siblings.py workspace <dir> --branch <name>` (with `--edit <sibling>` for a change that spans
-  repositories), install there, and `land` it when done. A worktree of this repository alone, such as an agent's
+  `python3 ../mbse-basis/scripts/polyrepo.py workspace <dir> --branch <name>` (with `--edit <sibling>` for a change that
+  spans repositories), install there, and `land` it when done. A worktree of this repository alone, such as an agent's
   built-in worktree isolation, breaks the relative paths to the siblings.
 - **The two implementations are equivalent.** Change both in the same commit, with the same names, the same error
   classes and byte-identical messages. JSON output must be byte-identical: regenerate the corpora and let CONF-02
@@ -62,20 +62,20 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 ## Commands
 
 ```sh
-python3 scripts/siblings.py clone            # mbse-schemas and mbse-expressions, beside this repository, pinned
-python3 scripts/siblings.py check            # the siblings are present and compatible with siblings.json
-cd python3 && uv sync --all-extras           # Python: use uv, never pip
+python3 ../mbse-basis/scripts/polyrepo.py clone # mbse-schemas and mbse-expressions, beside this repository, pinned
+python3 ../mbse-basis/scripts/polyrepo.py check # the siblings are present and compatible with siblings.json
+cd python3 && uv sync --all-extras              # Python: use uv, never pip
 uv run coverage run -m pytest && uv run coverage combine && uv run coverage report
 uv run python -m mbse.Patterns.Conformance.write
 
-cd typescript5 && nvm use && npm install     # TypeScript: Node 22 or later
-npm run coverage                             # type-checks, runs every notebook, gates at 100%
+cd typescript5 && nvm use && npm install        # TypeScript: Node 22 or later
+npm run coverage                                # type-checks, runs every notebook, gates at 100%
 npm run conformance
 ```
 
 ## Related repositories
 
 - [mbse-schemas](https://github.com/pitaman71/mbse-schemas): the data, its stores and their extents. A sibling
-  checkout, `../mbse-schemas`, pinned by version and commit in `siblings.json` (see `scripts/siblings.py`).
+  checkout, `../mbse-schemas`, pinned by version and commit in `siblings.json` (see mbse-basis' `scripts/polyrepo.py`).
 - [mbse-expressions](https://github.com/pitaman71/mbse-expressions): the expressions, Basic's evaluator and partial
   evaluator. A sibling checkout, `../mbse-expressions`, pinned in `siblings.json`.
