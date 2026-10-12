@@ -351,7 +351,7 @@ entries, from a family the caller chooses (or the best of several by a criterion
 ## Open questions
 
 - **Generating by resolving.** A specification is executed nondeterministically by choosing values consistent with
-  every constraint ([MBSE.md](../MBSE.md#what-a-specification-is-made-of)). The generators draw values, then check
+  every constraint ([MBSE.md](https://github.com/pitaman71/mbse-basis/blob/main/MBSE.md#what-a-specification-is-made-of)). The generators draw values, then check
   `requires` and draw again until it holds (`ATTEMPTS`); they do not resolve constraints to restrict what they draw,
   which is how a constraint such as `total = sum(items)` would determine a value rather than reject draws. That waits on
   resolving constraints in mbse-expressions (its Open questions).
