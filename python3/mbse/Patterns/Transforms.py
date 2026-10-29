@@ -1,7 +1,7 @@
 """Transforms: rewrites applied step by step, one decision per step, every decision recorded.
 
-A transform is a rewrite with a precondition and a postcondition, in the shape of MLIR's pattern rewriting (see
-docs/TRANSFORMS.md): its `before` and `after` are predicates over the same symbols; its `parameters` are mbse-schemas'
+A transform is a rewrite with a precondition and a postcondition, in the shape of MLIR's pattern rewriting (see mbse-basis
+[CAP-074: transforms applied step by step](../../../../mbse-basis/docs/capabilities/CAP-074.md)): its `before` and `after` are predicates over the same symbols; its `parameters` are mbse-schemas'
 `OfParameter`s, each typed by its value domain; and its `rewrite(store, match, arguments)` changes the store's data so
 that `after` holds for the match. A composite transform has `parts`, transforms of its own, instead of a rewrite.
 

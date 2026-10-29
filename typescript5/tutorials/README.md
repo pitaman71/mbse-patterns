@@ -11,7 +11,7 @@ written with mbse-expressions' expressions; you don't need its tutorial first, b
 It's written for TypeScript programmers who keep constraints about their data in more than one place, and who need test
 data that looks like production's. It's a port of the [Python tutorial](../../python3/tutorials/README.md), with the
 same case studies, the same reasoning and the same outputs: the generated contacts in case study 7 are the Python ones,
-seed for seed. The [design document](../../docs/PATTERNS.md) is the reference for everything here.
+seed for seed. mbse-basis [FEA-023: patterns over data](../../../mbse-basis/docs/features/FEA-023.md), with its capabilities, is the reference for everything here.
 
 Where the bindings differ, the code follows TypeScript idioms:
 

@@ -6,7 +6,7 @@ quantifiers over a store's objects, tests of links and weighted choices. `Valida
 and `Queries` finds a store's matches. `Distributions` weigh a population of matches by predicates, `Sample` draws from
 a store's data and `Generators` build new data, both from a random source the caller gives (`Sampling`). `Transforms`
 applies rewrites to a store's data step by step, one decision per step, and records them. Characterizers are planned
-(see docs/PATTERNS.md at https://github.com/pitaman71/mbse-patterns).
+(mbse-basis [CAP-073: distributions fit from data](../../../../mbse-basis/docs/capabilities/CAP-073.md)).
 
 For AI agents: read `skill/SKILL.md` next to this file first. It says when to use this package, the practices that
 prevent most mistakes, and which reference to load for a task.

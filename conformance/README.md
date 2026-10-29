@@ -1,5 +1,5 @@
 <!-- nav -->
-[← Transforms](../docs/TRANSFORMS.md) · [Home](../README.md) · [Python package →](../python3/README.md)
+[← Equivalence](../docs/EQUIVALENCE.md) · [Home](../README.md) · [Python package →](../python3/README.md)
 
 # Conformance corpus
 
@@ -20,4 +20,4 @@ byte-identical across implementations, and that each reads every other's back.
 ---
 
 <!-- nav -->
-[← Transforms](../docs/TRANSFORMS.md) · [Home](../README.md) · [Python package →](../python3/README.md)
+[← Equivalence](../docs/EQUIVALENCE.md) · [Home](../README.md) · [Python package →](../python3/README.md)

@@ -15,7 +15,7 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 | Know why the mbse repositories exist, and this one's part in them | [MBSE.md](MBSE.md) |
 | Use the library: write predicates, validate data, query a store | [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md), a skill. It loads its references only as needed |
 | Learn it by example, from a constraint to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), seven case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
-| Understand a design decision, a planned release or an open question | [docs/PATTERNS.md](docs/PATTERNS.md), by section |
+| Understand a design decision, a capability not yet built or an open question | mbse-basis [FEA-023: patterns over data](../mbse-basis/docs/features/FEA-023.md) and its capabilities' detail files, and [CAP-074: transforms applied step by step](../mbse-basis/docs/capabilities/CAP-074.md) to [CAP-083: policies with guards and distributions](../mbse-basis/docs/capabilities/CAP-083.md) for transforms |
 | Change the package | this file, then [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md) |
 | Find or add a test case | [python3/tests/TestPlan.md](python3/tests/TestPlan.md) (TypeScript's plan lists only its differences) |
 | Write the constraints themselves | [mbse-expressions' AGENTS.md](https://github.com/pitaman71/mbse-expressions/blob/main/AGENTS.md), in the sibling checkout |
@@ -56,8 +56,8 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 - **The skill is packaged with each implementation.** After editing `skills/mbse-patterns/`, run `skills/sync.sh`;
   SKL-01 fails until the copies match. Every fenced block tagged `python` or `typescript` in the skill is a complete
   program that SKL-02 runs; tag fragments `python fragment` or `typescript fragment`.
-- **Behavior is decided in `docs/PATTERNS.md`.** Record new decisions under Resolved, and put what stays undecided
-  under Open questions.
+- **Behavior is decided in the detail files of mbse-basis [FEA-023: patterns over data](../mbse-basis/docs/features/FEA-023.md)'s capabilities and of the transforms' capabilities**,
+  kept as mbse-basis' [`docs/README.md`](../mbse-basis/docs/README.md#detail-files) says (Detail files).
 
 ## Commands
 

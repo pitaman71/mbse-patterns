@@ -1,5 +1,5 @@
 <!-- nav -->
-[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Transforms →](TRANSFORMS.md)
+[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
 
 # Equivalence
 
@@ -7,6 +7,8 @@ The Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations h
 classes and messages, the same test cases in the same order, and write byte-identical JSON and YAML (the CONF suite).
 They follow mbse-schemas' and mbse-expressions' conventions; the differences below are deliberate, each forced by the
 language. Any other difference is a bug.
+This is the list mbse-basis [CAP-032: deliberate differences listed](../../mbse-basis/docs/capabilities/README.md#CAP-032) asks every
+repository to keep.
 
 | Concern | Python | TypeScript | Why | Cases |
 |---|---|---|---|---|
@@ -41,4 +43,4 @@ language. Any other difference is a bug.
 ---
 
 <!-- nav -->
-[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Transforms →](TRANSFORMS.md)
+[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
