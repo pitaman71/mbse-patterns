@@ -10,7 +10,7 @@ written with mbse-expressions' expressions; you don't need its tutorial first, b
 
 It's written for Python programmers who keep constraints about their data in more than one place, and who need test data
 that looks like production's. A TypeScript port with the same case studies is in
-the [TypeScript tutorial](../../typescript5/tutorials/README.md). The [design document](../../docs/PATTERNS.md)
+the [TypeScript tutorial](../../typescript5/tutorials/README.md). mbse-basis [FEA-023: patterns over data](../../../mbse-basis/docs/features/FEA-023.md), with its capabilities,
 is the reference for everything here.
 
 ## Running the notebooks

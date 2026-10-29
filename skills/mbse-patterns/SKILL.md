@@ -96,6 +96,7 @@ Why the mbse repositories exist, and this one's part: [MBSE.md](https://github.c
 | Write TypeScript: the same program, the differences from Python | [references/typescript.md](references/typescript.md) |
 
 Deeper material is in the repository: `python3/tutorials/` and `typescript5/tutorials/` teach it in seven case
-studies, with outputs, and `docs/PATTERNS.md` holds the design, the planned patterns, generators and
-characterizers, and the open questions. Links use `https://github.com/pitaman71/mbse-patterns/blob/main/<path>`; in a
+studies, with outputs, and mbse-basis
+[FEA-023: patterns over data](https://github.com/pitaman71/mbse-basis/blob/main/docs/features/FEA-023.md) holds the design: its capabilities, as built and as designed, and the open
+questions. Links use `https://github.com/pitaman71/mbse-patterns/blob/main/<path>`; in a
 checkout, `<path>` is relative to the repository root.

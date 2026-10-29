@@ -1,5 +1,5 @@
 <!-- nav -->
-[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Transforms →](TRANSFORMS.md)
+[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
 
 # Equivalence
 
@@ -41,4 +41,4 @@ language. Any other difference is a bug.
 ---
 
 <!-- nav -->
-[← Patterns design](PATTERNS.md) · [Home](../README.md) · [Transforms →](TRANSFORMS.md)
+[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)

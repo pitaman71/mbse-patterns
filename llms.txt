@@ -19,7 +19,7 @@ A pattern is a predicate whose constraint weighs alternatives (choices of weight
 
 ## Design
 
-- [PATTERNS.md](https://github.com/pitaman71/mbse-patterns/blob/main/docs/PATTERNS.md): predicates, validators and queries, the planned patterns, generators and characterizers, and the open questions
+- [FEA-023: patterns over data](https://github.com/pitaman71/mbse-basis/blob/main/docs/features/FEA-023.md), in mbse-basis: predicates, validators and queries, the planned patterns, generators and characterizers, and the open questions
 
 ## Optional
 

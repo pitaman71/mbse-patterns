@@ -24,7 +24,7 @@ Total: 52 cases, with the same IDs in the same order in both implementations.
 
 ## Not testable yet
 
-Characterizers (designed in `docs/PATTERNS.md`, not built); standing and asynchronous queries; native queries of a
+Characterizers (mbse-basis [CAP-073: distributions fit from data](../../../mbse-basis/docs/capabilities/CAP-073.md), not built); standing and asynchronous queries; native queries of a
 database store.
 
 ---
