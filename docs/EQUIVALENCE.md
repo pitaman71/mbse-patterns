@@ -7,7 +7,7 @@ The Python (`mbse.Patterns`) and TypeScript (`@mbse/patterns`) implementations h
 classes and messages, the same test cases in the same order, and write byte-identical JSON and YAML (the CONF suite).
 They follow mbse-schemas' and mbse-expressions' conventions; the differences below are deliberate, each forced by the
 language. Any other difference is a bug.
-This is the list mbse-basis [CAP-032: deliberate differences listed](../../mbse-basis/docs/capabilities/README.md#CAP-032) asks every
+This is the list mbse-basis [PRI-040: deliberate differences listed](../../mbse-basis/docs/PRINCIPLES.md#PRI-040) asks every
 repository to keep.
 
 | Concern | Python | TypeScript | Why | Cases |
