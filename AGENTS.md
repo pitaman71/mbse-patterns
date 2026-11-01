@@ -21,43 +21,19 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 | Write the constraints themselves | [mbse-expressions' AGENTS.md](https://github.com/pitaman71/mbse-expressions/blob/main/AGENTS.md), in the sibling checkout |
 | Model the data | [mbse-schemas' AGENTS.md](https://github.com/pitaman71/mbse-schemas/blob/main/AGENTS.md), in the sibling checkout |
 
-## Invariants when changing code
+## Read before any work
 
-- **One vocabulary across the mbse repositories.** A kind's or schema's named members are *properties*, never
-  "fields" (a field is only the host language's class member that holds one). An element of an expression tree is
-  a *term* (mbse-expressions), and of a program tree a *syntax node* (mbse-programs); never a bare "node" in code,
-  docs or messages. What a specification requires is a *constraint*, never a "rule"; a constraint is checked,
-  resolved or generated from, never executed ([MBSE.md, What a specification is made
-  of](https://github.com/pitaman71/mbse-basis/blob/main/MBSE.md#what-a-specification-is-made-of)). Across this many languages, terms collide (an SVA
-  `property`, a C++ template parameter, a SystemVerilog `constraint` block): wherever ours meets a language's own,
-  in docs and examples, qualify the colliding term with whose it is.
-- **The README opens with why.** Its first sentence or paragraph says, TL;DR style, why this repository exists, in
-  the terms of `MBSE.md`; what it is comes after. Keep that opening true as the repository changes.
-- **Every human-facing document has navigation.** A `{previous, home, next}` line heads and ends each document in
-  reading order (README, MBSE.md, tutorials, design, conformance, packages and test plans); after adding, renaming or
-  retitling one, run `python3 ../mbse-basis/scripts/update_doc_links.py`. Link text is human-readable, never a path.
-- **Parallel work happens in workspaces.** Agents working at the same time each get a workspace from
-  `python3 ../mbse-basis/scripts/polyrepo.py workspace <dir> --branch <name>` (with `--edit <sibling>` for a change that
-  spans repositories), install there, and `land` it when done. A worktree of this repository alone, such as an agent's
-  built-in worktree isolation, breaks the relative paths to the siblings.
-- **The two implementations are equivalent.** Change both in the same commit, with the same names, the same error
-  classes and byte-identical messages. JSON output must be byte-identical: regenerate the corpora and let CONF-02
-  compare them (YAML need only read back the same; mbse-schemas' two YAML writers quote some strings differently). A difference not listed in `docs/EQUIVALENCE.md` is a bug.
-- **Tutorials are tested too.** `pytest` and `npm run coverage` run `tutorials/` beside `tests/`; the two languages
-  tell the same case studies with the same outputs. Re-execute a tutorial after a change that alters its output, and
-  commit it with its outputs.
-- **Tests are Jupyter notebooks**, one suite per notebook, with the same case IDs in the same order in both
-  languages. Each case is a markdown cell `## ID · title` followed by one code cell. Notebooks are JSON written with
-  `indent=1`, `sort_keys=True` and `ensure_ascii=False`.
-- **Coverage is 100%** in both languages (statements and branches; in TypeScript also functions and lines). Close a gap
-  with an assertion in the shared case, in both suites.
-- **Identities are strings in TypeScript.** mbse-schemas keys objects by `String(identity())`, so a bound class's
-  `identity()` must give a string unique to the object, never the object itself.
-- **The skill is packaged with each implementation.** After editing `skills/mbse-patterns/`, run `skills/sync.sh`;
-  SKL-01 fails until the copies match. Every fenced block tagged `python` or `typescript` in the skill is a complete
-  program that SKL-02 runs; tag fragments `python fragment` or `typescript fragment`.
-- **Behavior is decided in the detail files of mbse-basis [FEA-023: patterns over data](../mbse-basis/docs/features/FEA-023.md)'s capabilities and of the transforms' capabilities**,
-  kept as mbse-basis' [`docs/README.md`](../mbse-basis/docs/README.md#detail-files) says (Detail files).
+Agents must read these mbse-basis documents before doing any work:
+
+- [The mbse basis](../mbse-basis/docs/README.md)
+- [Principles](../mbse-basis/docs/PRINCIPLES.md)
+- [Features](../mbse-basis/docs/features/README.md)
+- [Capabilities](../mbse-basis/docs/capabilities/README.md)
+
+These may be read selectively, on demand: [Vocabulary](../mbse-basis/docs/VOCABULARY.md) and
+[Qualities](../mbse-basis/docs/QUALITIES.md).
+
+Never write to `~/.claude/projects/*/memory/` or any hidden memory: what is worth keeping goes in the repository.
 
 ## Commands
 
@@ -71,6 +47,8 @@ uv run python -m mbse.Patterns.Conformance.write
 cd typescript5 && nvm use && npm install        # TypeScript: Node 22 or later
 npm run coverage                                # type-checks, runs every notebook, gates at 100%
 npm run conformance
+
+skills/sync.sh                                  # after editing skills/mbse-patterns/: the packaged copies (SKL-01)
 ```
 
 ## Related repositories
