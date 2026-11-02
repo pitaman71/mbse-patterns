@@ -13,7 +13,7 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 | You want to | Read |
 |---|---|
 | Know why the mbse repositories exist, and this one's part in them | [MBSE.md](MBSE.md) |
-| Use the library: write predicates, validate data, query a store | [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md), a skill. It loads its references only as needed |
+| Use the library: write predicates, validate data, query a store | A skill in each language: Python's [python3/mbse/Patterns/skill/SKILL.md](python3/mbse/Patterns/skill/SKILL.md), TypeScript's [typescript5/skill/SKILL.md](typescript5/skill/SKILL.md). Each loads its reference only as needed |
 | Learn it by example, from a constraint to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), seven case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
 | Understand a design decision, a capability not yet built or an open question | mbse-basis [FEA-023: patterns over data](../mbse-basis/docs/features/FEA-023.md) and its capabilities' detail files, and [CAP-074: transforms applied step by step](../mbse-basis/docs/capabilities/CAP-074.md) to [CAP-083: policies with guards and distributions](../mbse-basis/docs/capabilities/CAP-083.md) for transforms |
 | Change the package | this file, then [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md) |
@@ -47,9 +47,11 @@ uv run python -m mbse.Patterns.Conformance.write
 cd typescript5 && nvm use && npm install        # TypeScript: Node 22 or later
 npm run coverage                                # type-checks, runs every notebook, gates at 100%
 npm run conformance
-
-skills/sync.sh                                  # after editing skills/mbse-patterns/: the packaged copies (SKL-01)
 ```
+
+Each language has its own skill, in its own language: `python3/mbse/Patterns/skill/` and `typescript5/skill/`
+(mbse-basis [PRI-016: guidance written once](../mbse-basis/docs/PRINCIPLES.md#PRI-016)). Change both together: the same
+practices in the same order, and the same headings in the same order, which SKL-01 checks in both suites.
 
 ## Related repositories
 

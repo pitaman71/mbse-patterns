@@ -34,7 +34,7 @@ and `listed(store, ...)`, which lists contacts in the store's directory.
 | 3 | [Links as constraints](03_Links_As_Constraints.ipynb) | Mandatory and forbidden links; constraints about the whole book | `Exists`, `Forall` and `Contains`; `.forbids`; statements about the store; the evaluator |
 | 4 | [Constraints that take arguments](04_Constraints_That_Take_Arguments.ipynb) | One constraint per value copies its mistakes | Parameters; applying a predicate by reference; written once |
 | 5 | [The shape of a population](05_The_Shape_Of_A_Population.ipynb) | A believable mix, which no one record breaks | Patterns as predicates; `Choices`, weights, counts and precedence; `weigh`; sampling a store |
-| 6 | [Drawing values](06_Drawing_Values.ipynb) | Ages around 70, never under 65 | Distributions of values; witnesses and supports; type checks; mixtures as choices |
+| 6 | [Drawing values](06_Drawing_Values.ipynb) | Ages around 70, never under 65 | Distributions of values; witnesses and supports; schema checks; mixtures as choices |
 | 7 | [Generating test data](07_Generating_Test_Data.ipynb) | Reproducible data in production's mix | `Generate`; seeds and streams; rejection and its cost; generated data as ordinary data; what a generator can't build |
 
 ---

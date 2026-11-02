@@ -6,12 +6,12 @@ A pattern is a predicate whose constraint weighs alternatives (choices of weight
 
 ## Why
 
-- [MBSE.md](https://github.com/pitaman71/mbse-patterns/blob/main/MBSE.md): executable specifications, and each mbse repository's part in them
+- [MBSE.md](https://github.com/pitaman71/mbse-patterns/blob/main/MBSE.md): why the mbse repositories exist, and each one's part in them
 
 ## Using it
 
-- [Agent skill](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/SKILL.md): when to use it, the practices that prevent most mistakes, and references loaded per task
-- [Python](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/references/python.md) and [TypeScript](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/references/typescript.md): a complete program, cheat sheet and traps
+- Agent skills, one per language: [Python](https://github.com/pitaman71/mbse-patterns/blob/main/python3/mbse/Patterns/skill/SKILL.md) and [TypeScript](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/skill/SKILL.md): when to use it, the practices that prevent most mistakes, and a reference loaded per task
+- Their references, [Python](https://github.com/pitaman71/mbse-patterns/blob/main/python3/mbse/Patterns/skill/references/usage.md) and [TypeScript](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/skill/references/usage.md): a complete program, cheat sheet and traps
 
 ## Learning it
 

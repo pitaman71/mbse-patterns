@@ -1,9 +1,9 @@
-# mbse-patterns in Python
+# Using mbse-patterns
 
-Install `mbse-patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions` and
-`Generators` from `mbse.Patterns`, the expressions' writers
-from `mbse.Expressions` (and `Text.FromFunction` from `mbse.Expressions.Dialects.Python`), and the data's framework from
-`mbse.Schemas.Framework`.
+Install `mbse-patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions`,
+`Generators` and `Transforms` from `mbse.Patterns`, the expressions' writers from `mbse.Expressions` (and
+`Text.FromFunction` from `mbse.Expressions.Dialects.Python`), and the data's framework (`JSON`, `Proxies`, `Schemas`
+and `Stores`, whose `PCG32` is the random source) from `mbse.Schemas.Framework`.
 
 ## A complete program
 
@@ -136,6 +136,7 @@ Transforms.steps(store, trace)                              # read back; step.ke
 # a rewrite may return what it wrote, by role: {"box": box}; step.wrote and step.match are Links (role, path, element)
 session.wrote(box)                                          # the step that wrote it
 Stores.Combined(session.store, Transforms.records(session)) # steps as objects, linked to their elements, to query
+#   (Stores.Combined is mbse-schemas 0.10.0's, which this release pins; mbse-schemas 0.20.0 deprecates it)
 again = Transforms.Session(store, [Label, Size], earlier=session.steps)  # reuses decisions by key
 again.run(); again.orphans; Transforms.diff(session.steps, again.steps)  # run() alone takes only reused ones
 ```
@@ -153,7 +154,9 @@ again.run(); again.orphans; Transforms.diff(session.steps, again.steps)  # run()
 - With `.decreasing()`, a match falls under the first arm of a choices that holds, so put the more specific arms first.
   A generator chooses arms by weight, draws values, sets what equalities say (`x.p == v`, through applied predicates),
   and redraws, up to 100 times, until the predicate holds, its chosen arms hold, and first.
-- A distribution's value reaches a property only through an equality in its body (`person.age == age`), and must be
-  of the property's type: a normal gives floats unless `.rounded()`; a uniform gives ints only when both bounds are
+  [CAP-042: data generated from constraints](../../../../../../mbse-basis/docs/capabilities/CAP-042.md).
+- A distribution's value reaches a property only through an equality in its body (`person.age == age`), and must fit
+  the property's schema: a normal gives floats unless `.rounded()`; a uniform gives ints only when both bounds are
   ints. Validating data, a distribution holds when the value that equality gives is in its support.
-- Sampling and generating take a random source, not a store's: the same seed gives the same draws, in both languages.
+- Sampling and generating take a random source you give, not a store's: the same seed gives the same draws.
+  [PRI-013: nondeterminism passed in](../../../../../../mbse-basis/docs/PRINCIPLES.md#PRI-013).
