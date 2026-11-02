@@ -110,7 +110,8 @@ npm run coverage
 - Tutorials, seven case studies that build from a constraint to generated test data:
   [Python](python3/tutorials/README.md) and [TypeScript](typescript5/tutorials/README.md)
 - mbse-basis [FEA-023: patterns over data](../mbse-basis/docs/features/FEA-023.md): the design, as built and as designed, its capabilities and their open questions
-- [Agent skill](skills/mbse-patterns/SKILL.md): a skill for AI agents using the package
+- Agent skills for AI agents using the package, one per language: [Python](python3/mbse/Patterns/skill/SKILL.md) and
+  [TypeScript](typescript5/skill/SKILL.md)
 - [Guide for AI agents](AGENTS.md): for agents changing it; [Equivalence](docs/EQUIVALENCE.md): the two implementations
 
 ---

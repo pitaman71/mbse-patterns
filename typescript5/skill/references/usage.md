@@ -1,13 +1,13 @@
-# mbse-patterns in TypeScript
+# Using mbse-patterns
 
-Install `@mbse/patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions` and
-`Generators` from it, the expressions' writers from
-`@mbse/expressions`, and the data's framework from `@mbse/schemas/Framework`. Everything matches Python, with the
-differences below.
+Install `@mbse/patterns`, then import `Predicates`, `Constraints`, `Validators`, `Queries`, `Distributions`,
+`Generators` and `Transforms` from it, the expressions' writers from `@mbse/expressions`, and the data's framework
+(`JSON`, `Proxies`, `Schemas` and `Stores`, whose `PCG32` is the random source) from `@mbse/schemas/Framework`.
 
 ## A complete program
 
-The same address book as in Python.
+An address book whose contacts must be adults and whose phones must have numbers: predicates written, stored, checked
+against data, and used as queries.
 
 ```typescript
 import { Expressions as E } from "@mbse/expressions";
@@ -101,28 +101,73 @@ check(new Set(people.map((x) => x.name)).size === 2 && cy > 250 && cy < 350, "ge
 check(people.every((x) => x.name === "Cy" ? x.age >= 18n && x.age <= 64n : x.age >= 65n) && generated.rejected > 0, "drawn");
 ```
 
-## Differences from Python
+## Cheat sheet
 
-- Integers are `bigint`s (`18n`, and `BigInt` as an `int` property's native); a `number` is a float.
-- Constraints are written with writers: TypeScript has no `FromFunction`, since a JavaScript function has no Python
-  source. `Contains` calls its condition with a variable named after its one parameter, read from the function's source,
-  so the condition is written with writers too: `(e) => e.phone.eq(p)`.
-- `.symbols(...)` takes a record or a `Map`, and a predicate's `symbols` is a `Map`; a match is a record.
-- A validator's options are an object: `Validate(store, constraints, { unknown: "ignore" })`.
-- Builders are made with `new`: `new Predicates.OfPredicate.Builder()`; the algebra's evaluator is
-  `new Predicates.Evaluator(store).run(constraint, variables)`.
-- A predicate is applied with `HasName.call(person, "alice")`, since an object is not callable; Python also calls it
-  directly, `HasName(person, "alice")`. Parameters by name are a last object literal, `HasName.call(person, { name:
-  "alice" })`, where Python takes keyword arguments. A builder gives a name it has not declared as `undefined`, where Python raises
-  `AttributeError`.
-- Seeds and random words are `bigint`s (`new Stores.PCG32(42n)`), and weights are numbers: there is no `int` weight
-  to refuse.
-- A distribution's `.requires(...)` calls a function with the variable of its own symbol, `(age) => person.age.eq(age)`,
-  outer names coming from the closure, where Python reads `lambda person, age: person.age == age`; a bundler may
-  rename a parameter that shadows an outer name, so TypeScript does not read the names.
-- A transform's options are an object, `new Transforms.Transform("Label", before, after, { parameters, rewrite })`, an
-  answer is a record, `candidate.answer({ size: 3n })`, and a clause's arguments are a record, `new
-  Transforms.Clause("Label", { case: "upper" }, 2)`; a candidate's match and arguments are records. A rerun's earlier
-  steps come last, by position: `new Transforms.Session(store, transforms, {}, null, earlier)`.
-- `select(predicate, variables, unknown)` takes `unknown` by position (`null` for no variables), and returns a
-  generator: `next()` gives `{ value, done }`.
+```typescript fragment
+new Predicates.OfPredicate.Builder().name(n).symbols({ the: Schema }).parameters((p) => p.name("k")).requires(spec).create()
+HasName.call(person, "alice")                               // a predicate applied by reference: its symbols, then parameters
+HasName.call(person, { name: "alice" })                     // parameters by name, a last object literal; one given no argument is unknown
+new Constraints.OfSet.Builder().predicates(...specs).create()   // specs: predicates, or functions taking a predicate builder
+Constraints.check(predicates)                               // a set, or ValueError with every problem
+new Constraints.OfStore(store); Constraints.Builders        // read (and write) predicates; Builders resolves no names
+Constraints.register(store)                                 // the meta-schemas, and the algebra's, in another store
+Validators.Validate(store, predicates, { unknown: "report" })(schema, value)   // or .Reachable(schema, root)
+new Queries.Scan(store).select(predicate, variables, unknown)   // a generator of matches: { symbol: object }; null for no variables
+new Queries.Scan(store).explain(predicate, variables)       // the plan, one line per symbol
+Queries.select(store, predicate, ...)                       // a queryable store's own select, or a scan
+Predicates.Exists((q) => q.symbols({ p: Phone }).requires(spec).forbids(spec))   // and Forall: the algebra
+Predicates.Contains(c.phones, (e) => e.phone.eq(p))         // Basic's any over entries(c, 'phones'); a hop for the planner
+new Predicates.Evaluator(store).run(constraint, variables)  // evaluates the algebra over a store
+new Distributions.Choices.Builder().arms((a) => a.weight(3).requires(...specs), ...).count((c) => c.ge(1n)).decreasing().create()
+new Distributions.Normal.Builder().symbol("age").mean(70n).deviation(8n).rounded().requires((age) => person.age.eq(age)).create()
+new Distributions.Uniform.Builder().symbol(s).low(a).high(b); Poisson...rate(r); Geometric...probability(p)
+new Distributions.Categorical.Builder().symbol(s).option(3, "x").option(1, "y")   // mixtures: choices of distributions
+new Predicates.Evaluator(store).weigh(constraint, match)    // the weight of the arms a match falls under, or 0
+Generators.Sample(store, predicate, new Stores.PCG32(seed)) // the store's matches, drawn by weight
+Generators.Generate(store, predicate, new Stores.PCG32(seed))   // new matches: arms by weight, values drawn, equalities set
+new Transforms.Transform("Label", before, after, { parameters: [caseSpec], rewrite })   // or { parts: [...] }: a composite
+const session = new Transforms.Session(store, [Label, Size])    // enabled: before holds, after not; finite domains expand
+session.candidates(policy); session.take(c.answer({ size: 3n }))   // the caller decides, one step at a time; step_in(c) too
+session.run(new Transforms.Policy(new Transforms.Clause("Label", { case: "upper" }, 2)))   // or step_over: the policy decides
+session.trace(Transforms.register(store))                   // the steps as data, a Transforms.Trace
+Transforms.steps(store, trace)                              // read back; step.key === "Label(i=Shelf/items[0])"
+// a rewrite may return what it wrote, by role, as a Map: new Map([["box", box]]); step.wrote and step.match are Links
+session.wrote(box)                                          // the step that wrote it
+new Stores.Combined(session.store, Transforms.records(session))   // steps as objects, linked to their elements, to query
+//   (Stores.Combined is mbse-schemas 0.10.0's, which this release pins; mbse-schemas 0.16.0 deprecates it)
+const again = new Transforms.Session(store, [Label, Size], {}, null, session.steps)   // reuses decisions by key
+again.run(); again.orphans; Transforms.diff(session.steps, again.steps)   // run() alone takes only reused ones
+```
+
+## Traps
+
+- Integers are `bigint`s (`18n`, and `BigInt` as an `int` property's native); a `number` is a float. Seeds and random
+  words are `bigint`s too (`new Stores.PCG32(42n)`); weights are numbers.
+- Constraints are written with writers (`the.age.ge(18n)`, `p.has("number")`, `E.operation("implies", a, b)`); a
+  function's source is never read as a constraint. `Contains` and a choices' `count` call their function with a
+  variable named after its one parameter, so write its body with writers too: `(e) => e.phone.eq(p)`.
+- A distribution's `.requires(...)` calls its function with the variable of the distribution's own symbol,
+  `(age) => person.age.eq(age)`; outer names come from the closure. Set `.symbol(...)` first.
+- Builders are made with `new`, and a predicate is applied with `.call(...)`: an object is not callable. A builder
+  gives a name it has not declared as `undefined`.
+- With several symbols, a constraint without a relation between them matches every combination; say how they are
+  related.
+- `Reachable` follows adjacencies both ways: from one contact it reaches its directory, and through it every other
+  contact. Validate one object alone with `validate(schema, value)`.
+- A query's variables must not be named like its symbols, and an object variable is bound per match (it has no
+  literal). A predicate's parameters are given as a query's variables, or by applying it; a validator refuses it.
+  `select` takes `unknown` by position, after `variables` (`null` for none), and returns a generator: `next()` gives
+  `{ value, done }`.
+- With `.decreasing()`, a match falls under the first arm of a choices that holds, so put the more specific arms first.
+  A generator chooses arms by weight, draws values, sets what equalities say (`x.p.eq(v)`, through applied predicates),
+  and redraws, up to 100 times, until the predicate holds, its chosen arms hold, and first.
+  [CAP-042: data generated from constraints](../../../../mbse-basis/docs/capabilities/CAP-042.md).
+- A distribution's value reaches a property only through an equality in its body (`person.age.eq(age)`), and must fit
+  the property's schema: a normal gives floats unless `.rounded()`; a uniform gives `bigint`s only when both bounds
+  are `bigint`s. Validating data, a distribution holds when the value that equality gives is in its support.
+- A transform's options, an answer and a clause's arguments are records:
+  `new Transforms.Transform("Label", before, after, { parameters, rewrite })`, `candidate.answer({ size: 3n })`; but
+  what a rewrite wrote is returned as a `Map` of roles, and any other return value is no record. A rerun's earlier
+  steps come last, by position, after the scope and labels.
+- Sampling and generating take a random source you give, not a store's: the same seed gives the same draws.
+  [PRI-013: nondeterminism passed in](../../../../mbse-basis/docs/PRINCIPLES.md#PRI-013).
