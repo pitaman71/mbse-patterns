@@ -136,7 +136,7 @@ Transforms.steps(store, trace)                              # read back; step.ke
 # a rewrite may return what it wrote, by role: {"box": box}; step.wrote and step.match are Links (role, path, element)
 session.wrote(box)                                          # the step that wrote it
 Stores.Combined(session.store, Transforms.records(session)) # steps as objects, linked to their elements, to query
-#   (Stores.Combined is mbse-schemas 0.10.0's, which this release pins; mbse-schemas 0.20.0 deprecates it)
+#   (Stores.Combined is mbse-schemas 0.10.0's, which this release pins; mbse-schemas 0.16.0 deprecates it)
 again = Transforms.Session(store, [Label, Size], earlier=session.steps)  # reuses decisions by key
 again.run(); again.orphans; Transforms.diff(session.steps, again.steps)  # run() alone takes only reused ones
 ```
