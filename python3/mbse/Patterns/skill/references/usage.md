@@ -154,9 +154,9 @@ again.run(); again.orphans; Transforms.diff(session.steps, again.steps)  # run()
 - With `.decreasing()`, a match falls under the first arm of a choices that holds, so put the more specific arms first.
   A generator chooses arms by weight, draws values, sets what equalities say (`x.p == v`, through applied predicates),
   and redraws, up to 100 times, until the predicate holds, its chosen arms hold, and first.
-  [CAP-042: data generated from constraints](../../../../../../mbse-basis/docs/capabilities/CAP-042.md).
+  [CAP-042: data generated from constraints](mbse:mbse-basis/docs/capabilities/CAP-042.md).
 - A distribution's value reaches a property only through an equality in its body (`person.age == age`), and must fit
   the property's schema: a normal gives floats unless `.rounded()`; a uniform gives ints only when both bounds are
   ints. Validating data, a distribution holds when the value that equality gives is in its support.
 - Sampling and generating take a random source you give, not a store's: the same seed gives the same draws.
-  [PRI-013: nondeterminism passed in](../../../../../../mbse-basis/docs/PRINCIPLES.md#PRI-013).
+  [PRI-013: nondeterminism passed in](mbse:mbse-basis/docs/PRINCIPLES.md#PRI-013).
