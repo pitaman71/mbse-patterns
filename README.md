@@ -67,9 +67,9 @@ distributions (uniform, normal, Poisson, geometric, categorical); a sampler draw
 generator builds new data, redrawing until the predicate holds, byte-identical in both languages from a seed.
 A transform rewrites a store's data where its `before` predicate holds and its `after` does not, and a session applies
 transforms one decision per step, each decision the caller's or, where the caller steps over, a policy's, and keeps the
-steps as a trace (mbse-basis [CAP-074: transforms applied step by step](../mbse-basis/docs/capabilities/CAP-074.md)): the basis of generating code with people and agents in
+steps as a trace (mbse-basis [CAP-074: transforms applied step by step](https://github.com/pitaman71/mbse-basis/blob/main/docs/capabilities/CAP-074.md)): the basis of generating code with people and agents in
 the loop. Characterizers that fit distributions to data are designed, not built (mbse-basis
-[CAP-073: distributions fit from data](../mbse-basis/docs/capabilities/CAP-073.md)).
+[CAP-073: distributions fit from data](https://github.com/pitaman71/mbse-basis/blob/main/docs/capabilities/CAP-073.md)).
 
 Like its siblings, it has two equivalent implementations, in Python (`mbse.Patterns`) and TypeScript
 (`@mbse/patterns`), with the same API, the same messages and byte-identical JSON. Python can also read a constraint from
@@ -109,7 +109,7 @@ npm run coverage
 
 - Tutorials, seven case studies that build from a constraint to generated test data:
   [Python](python3/tutorials/README.md) and [TypeScript](typescript5/tutorials/README.md)
-- mbse-basis [FEA-023: patterns over data](../mbse-basis/docs/features/FEA-023.md): the design, as built and as designed, its capabilities and their open questions
+- mbse-basis [FEA-023: patterns over data](https://github.com/pitaman71/mbse-basis/blob/main/docs/features/FEA-023.md): the design, as built and as designed, its capabilities and their open questions
 - Agent skills for AI agents using the package, one per language: [Python](python3/mbse/Patterns/skill/SKILL.md) and
   [TypeScript](typescript5/skill/SKILL.md)
 - [Guide for AI agents](AGENTS.md): for agents changing it; [Equivalence](docs/EQUIVALENCE.md): the two implementations

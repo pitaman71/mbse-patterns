@@ -15,7 +15,7 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 | Know why the mbse repositories exist, and this one's part in them | [MBSE.md](MBSE.md) |
 | Use the library: write predicates, validate data, query a store | A skill in each language: Python's [python3/mbse/Patterns/skill/SKILL.md](python3/mbse/Patterns/skill/SKILL.md), TypeScript's [typescript5/skill/SKILL.md](typescript5/skill/SKILL.md). Each loads its reference only as needed |
 | Learn it by example, from a constraint to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), seven case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
-| Understand a design decision, a capability not yet built or an open question | mbse-basis [FEA-023: patterns over data](../mbse-basis/docs/features/FEA-023.md) and its capabilities' detail files, and [CAP-074: transforms applied step by step](../mbse-basis/docs/capabilities/CAP-074.md) to [CAP-083: policies with guards and distributions](../mbse-basis/docs/capabilities/CAP-083.md) for transforms |
+| Understand a design decision, a capability not yet built or an open question | mbse-basis [FEA-023: patterns over data](https://github.com/pitaman71/mbse-basis/blob/main/docs/features/FEA-023.md) and its capabilities' detail files, and [CAP-074: transforms applied step by step](https://github.com/pitaman71/mbse-basis/blob/main/docs/capabilities/CAP-074.md) to [CAP-083: policies with guards and distributions](https://github.com/pitaman71/mbse-basis/blob/main/docs/capabilities/CAP-083.md) for transforms |
 | Change the package | this file, then [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md) |
 | Find or add a test case | [python3/tests/TestPlan.md](python3/tests/TestPlan.md) (TypeScript's plan lists only its differences) |
 | Write the constraints themselves | [mbse-expressions' AGENTS.md](https://github.com/pitaman71/mbse-expressions/blob/main/AGENTS.md), in the sibling checkout |
@@ -25,15 +25,22 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 
 Agents must read these mbse-basis documents before doing any work:
 
-- [The mbse basis](../mbse-basis/docs/README.md)
-- [Principles](../mbse-basis/docs/PRINCIPLES.md)
-- [Features](../mbse-basis/docs/features/README.md)
-- [Capabilities](../mbse-basis/docs/capabilities/README.md)
+- [The mbse basis](https://github.com/pitaman71/mbse-basis/blob/main/docs/README.md)
+- [Principles](https://github.com/pitaman71/mbse-basis/blob/main/docs/PRINCIPLES.md)
+- [Features](https://github.com/pitaman71/mbse-basis/blob/main/docs/features/README.md)
+- [Capabilities](https://github.com/pitaman71/mbse-basis/blob/main/docs/capabilities/README.md)
 
-These may be read selectively, on demand: [Vocabulary](../mbse-basis/docs/VOCABULARY.md) and
-[Qualities](../mbse-basis/docs/QUALITIES.md).
+These may be read selectively, on demand: [Vocabulary](https://github.com/pitaman71/mbse-basis/blob/main/docs/VOCABULARY.md) and
+[Qualities](https://github.com/pitaman71/mbse-basis/blob/main/docs/QUALITIES.md).
 
 Never write to `~/.claude/projects/*/memory/` or any hidden memory: what is worth keeping goes in the repository.
+
+Resolve a link written `mbse:<repo>/<path>`, as skills and source comments write a link into another mbse
+repository, to the first of these that exists: in a polyrepo checkout, `<repo root>/../<repo>/<path>`, where `<repo
+root>` is this repository's root; for a link into the installed package's own repository, `<path>` without its
+language directory (`python3/` or `typescript5/`), under the installed package's root (Python: the `site-packages`
+directory that holds `mbse/`; npm: the package's directory), where the package ships that file; otherwise
+`https://github.com/pitaman71/<repo>/blob/main/<path>`.
 
 ## Commands
 
@@ -50,7 +57,7 @@ npm run conformance
 ```
 
 Each language has its own skill, in its own language: `python3/mbse/Patterns/skill/` and `typescript5/skill/`
-(mbse-basis [PRI-016: guidance written once](../mbse-basis/docs/PRINCIPLES.md#PRI-016)). Change both together: the same
+(mbse-basis [PRI-016: guidance written once](https://github.com/pitaman71/mbse-basis/blob/main/docs/PRINCIPLES.md#PRI-016)). Change both together: the same
 practices in the same order, and the same headings in the same order, which SKL-01 checks in both suites.
 
 ## Related repositories

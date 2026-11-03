@@ -42,8 +42,8 @@ give. `Transforms` rewrites a store's data step by step. Import them from `mbse.
 - You need the objects of an mbse-schemas store, or combinations of them, that satisfy a condition.
 
 For the constraints themselves (writing, evaluating, translating expressions), use the
-[mbse-expressions skill](https://github.com/pitaman71/mbse-expressions/blob/main/skills/mbse-expressions/SKILL.md);
-for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas/blob/main/skills/mbse-schemas/SKILL.md).
+[mbse-expressions skill](mbse:mbse-expressions/skills/mbse-expressions/SKILL.md);
+for the data, the [mbse-schemas skill](mbse:mbse-schemas/skills/mbse-schemas/SKILL.md).
 
 ## Practices that prevent most mistakes
 
@@ -51,23 +51,23 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
    and parameters, written as Basic variables of the same names (`c = E.variable("c")`, or `pred.c` from the builder
    that declares `c`), and, in a query, its variables; use only Basic's core vocabulary. `Constraints.check(...)` and
    every validator and query reject anything else up front.
-   [CAP-150: predicates as data](../../../../../mbse-basis/docs/capabilities/CAP-150.md).
+   [CAP-150: predicates as data](mbse:mbse-basis/docs/capabilities/CAP-150.md).
 2. **A predicate applies to every match.** With several symbols, the matches are every combination of their objects;
    say in the constraint which combinations matter (e.g. that a phone is one of a contact's).
 3. **Unknown is not false.** A constraint reading an absent property is unknown. Choose what that means: a validator's
    `unknown` is `"report"` (the default), `"ignore"` or `"violation"`, and a query gives unknown matches only with
-   `unknown=True`. [CAP-029: three-valued constraint checking](../../../../../mbse-basis/docs/capabilities/CAP-029.md).
+   `unknown=True`. [CAP-029: three-valued constraint checking](mbse:mbse-basis/docs/capabilities/CAP-029.md).
 4. **List what you build.** Queries, quantifiers and `Reachable` see what the store's singletons reach; an object
    built but never linked to them is not found.
 5. **Write links with the algebra.** `Predicates.Exists` and `Forall` are built with `.symbols(...)`, `.requires(...)`
    and `.forbids(...)`; `Contains(c.phones, lambda e: e.phone == p)` tests an adjacency's entries. A mandatory link is
    `.requires(Exists(...))`, a forbidden one `.forbids(Exists(...))`, a possible one a `Choices`; a predicate without
    symbols is a statement about the whole store.
-   [CAP-152: relation constraint terms as mandatory, possible, or forbidden entry patterns](../../../../../mbse-basis/docs/capabilities/CAP-152.md).
+   [CAP-152: relation constraint terms as mandatory, possible, or forbidden entry patterns](mbse:mbse-basis/docs/capabilities/CAP-152.md).
 6. **Shape the constraint for the planner.** Write each condition as its own `.requires(...)`, and relate two symbols
    with `Contains(c.phones, lambda e: e.phone == p)`, so the query takes `p` from `c`'s entries instead of scanning;
    declare relations' `unique` clauses; check the plan with `explain`.
-   [CAP-151: constraint evaluation within query interpretation](../../../../../mbse-basis/docs/capabilities/CAP-151.md).
+   [CAP-151: constraint evaluation within query interpretation](mbse:mbse-basis/docs/capabilities/CAP-151.md).
 7. **Read predicates through the store that registers their schemas**: `Constraints.OfStore(store)`. Writing needs no
    store.
 8. **Apply a predicate; don't copy it.** One with parameters (`.parameters(lambda p: p.name("name"))`) is applied:
@@ -79,14 +79,14 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
    distribution of values (`Distributions.Normal.Builder().symbol("age")...requires(lambda person, age: person.age ==
    age)`) binds a symbol to a drawn value that its body's equalities set. `Generators.Generate` and `Generators.Sample`
    draw with a random source you give (`Stores.PCG32(seed)`).
-   [CAP-072: distributions in predicates](../../../../../mbse-basis/docs/capabilities/CAP-072.md),
-   [CAP-042: data generated from constraints](../../../../../mbse-basis/docs/capabilities/CAP-042.md).
+   [CAP-072: distributions in predicates](mbse:mbse-basis/docs/capabilities/CAP-072.md),
+   [CAP-042: data generated from constraints](mbse:mbse-basis/docs/capabilities/CAP-042.md).
 10. **A transform rewrites where its before holds and its after does not.** `Transforms.Session(store, transforms)`
    offers the enabled candidates; take each step yourself (`take`, `step_in`) or let a policy (`step_over`, `run`).
    A rewrite must establish its after. Give a rerun the earlier steps (`earlier=`) to reuse their decisions; compare
    two runs with `Transforms.diff`.
-   [CAP-074: transforms applied step by step](../../../../../mbse-basis/docs/capabilities/CAP-074.md),
-   [CAP-076: reruns reuse decisions](../../../../../mbse-basis/docs/capabilities/CAP-076.md).
+   [CAP-074: transforms applied step by step](mbse:mbse-basis/docs/capabilities/CAP-074.md),
+   [CAP-076: reruns reuse decisions](mbse:mbse-basis/docs/capabilities/CAP-076.md).
 
 ## Load the reference for your task
 
@@ -95,5 +95,5 @@ for the data, the [mbse-schemas skill](https://github.com/pitaman71/mbse-schemas
 | Write Python: a complete program, API cheat sheet, traps | [references/usage.md](references/usage.md) |
 
 The [Python tutorial](../../../tutorials/README.md) teaches it in seven case studies, with outputs, and mbse-basis
-[FEA-023: patterns over data](../../../../../mbse-basis/docs/features/FEA-023.md) holds the design: its capabilities,
+[FEA-023: patterns over data](mbse:mbse-basis/docs/features/FEA-023.md) holds the design: its capabilities,
 as built and as designed, and the open questions.
