@@ -10,12 +10,11 @@ A pattern is a predicate whose constraint weighs alternatives (choices of weight
 
 ## Using it
 
-- Agent skills, one per language: [Python](https://github.com/pitaman71/mbse-patterns/blob/main/python3/mbse/Patterns/skill/SKILL.md) and [TypeScript](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/skill/SKILL.md): when to use it, the practices that prevent most mistakes, and a reference loaded per task
-- Their references, [Python](https://github.com/pitaman71/mbse-patterns/blob/main/python3/mbse/Patterns/skill/references/usage.md) and [TypeScript](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/skill/references/usage.md): a complete program, cheat sheet and traps
+- [Agent skill](https://github.com/pitaman71/mbse-patterns/blob/main/skills/mbse-patterns/SKILL.md), written once for both languages: when to use it, and the practices that prevent most mistakes, why, when and how, each how linked to its case in the Python and TypeScript tutorials or tests
 
 ## Learning it
 
-- [Python tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/python3/tutorials/README.md) and [TypeScript tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/tutorials/README.md): seven case studies, from a constraint your data must keep to reproducible generated test data
+- [Python tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/python3/tutorials/README.md) and [TypeScript tutorial](https://github.com/pitaman71/mbse-patterns/blob/main/typescript5/tutorials/README.md): eight case studies, from a constraint your data must keep to reproducible generated test data and rewriting step by step
 
 ## Design
 

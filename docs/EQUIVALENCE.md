@@ -1,5 +1,5 @@
 <!-- nav -->
-[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
+[← 8 · Rewriting step by step (TypeScript)](../typescript5/tutorials/08_Rewriting_Step_By_Step.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
 
 # Equivalence
 
@@ -39,10 +39,9 @@ repository to keep.
 | A distribution's conditions written by a function | `.requires(lambda person, age: person.age == age)`, read as `FromFunction` reads it: its parameters are the names, outer and bound | `.requires((age) => person.age.eq(age))`, called with the variable of the distribution's symbol; outer names come from the closure | a JavaScript function has no Python source, and a bundler renames a parameter that shadows an outer name | DST-03, GEN-06 |
 | A choices' count written by a function | `.count(lambda c: c >= 1)`, read as `FromFunction` reads it | `.count((c) => c.ge(1n))`, called with a variable named after its parameter, read from its source | as above | DST-01 |
 | A distribution's symbol before `.symbol(...)` | `n.age` raises `AttributeError` | `n.age` is `undefined`; a function in `.requires` raises `TypeError` | a proxy's missing property | DST-03 |
-| The agent skill | `mbse/Patterns/skill/`, written in Python | `skill/`, written in TypeScript; the same practices, and the same headings in the same order | each skill shows usage in its reader's language ([PRI-016: guidance written once](https://github.com/pitaman71/mbse-basis/blob/main/docs/PRINCIPLES.md#PRI-016)) | SKL-01 |
-| Tutorial 02's cells | 16: a markdown cell of its own says that `select` returns an iterator, and 02.3 shows the plan and the matches in two code cells | 14: that sentence opens 02.2's markdown cell, and 02.3 shows both in one code cell | a notebook's layout only: the case IDs, prose and outputs are the same | tutorial 02 |
+| Tutorial 02's cells | 16: 02.3 shows the plan and the matches in two code cells | 15: 02.3 shows both in one code cell | a notebook's layout only: the case IDs, prose and outputs are the same | tutorial 02 |
 
 ---
 
 <!-- nav -->
-[← 7 · Generating test data (TypeScript)](../typescript5/tutorials/07_Generating_Test_Data.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
+[← 8 · Rewriting step by step (TypeScript)](../typescript5/tutorials/08_Rewriting_Step_By_Step.ipynb) · [Home](../README.md) · [Conformance corpus →](../conformance/README.md)
