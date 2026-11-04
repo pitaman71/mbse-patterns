@@ -18,6 +18,7 @@ how links its case in the tutorials or tests of each language, where it runs, wi
 language. Where the languages spell a thing differently, [In each language](#in-each-language) says so.
 
 ## When to use it
+<!-- no case: says when to use the package, not how -->
 
 - An interface or model has constraints its data must satisfy, and they must be stored, shared or applied identically in
   several programs or languages.
@@ -214,6 +215,7 @@ The two implementations are equivalent: the same names, results and JSON. Where 
   - Python: [T08.9: what each step wrote](mbse:mbse-patterns/python3/tutorials/08_Rewriting_Step_By_Step.ipynb#T08.9) · TypeScript: [T08.9: what each step wrote](mbse:mbse-patterns/typescript5/tutorials/08_Rewriting_Step_By_Step.ipynb#T08.9)
 
 ## Learn it by example
+<!-- no case: points to the tutorials and the test plan as a whole -->
 
 The tutorials teach it in eight case studies, from a constraint your data must keep to rewriting step by step, each a
 notebook committed with its outputs and run as a test:
