@@ -183,7 +183,7 @@ for the data, the [mbse-schemas skill](mbse:mbse-schemas/skills/mbse-schemas/SKI
 ## In each language
 
 The two implementations are equivalent: the same names, results and JSON. Where a language forces a difference
-(mbse-patterns' [EQUIVALENCE.md](mbse:mbse-patterns/docs/EQUIVALENCE.md)), each case shows its own:
+(mbse-patterns' [Equivalence](mbse:mbse-patterns/docs/EQUIVALENCE.md)), each case shows its own:
 
 - **Conditions.** Python reads a condition from a lambda's source (`Text.FromFunction`), its parameters named as the
   symbols, and never calls it; TypeScript writes conditions with mbse-expressions' writers (`the.age.ge(18n)`). Either
@@ -219,4 +219,4 @@ The tutorials teach it in eight case studies, from a constraint your data must k
 notebook committed with its outputs and run as a test:
 [Python](mbse:mbse-patterns/python3/tutorials/README.md) and
 [TypeScript](mbse:mbse-patterns/typescript5/tutorials/README.md). The test plan,
-[TestPlan.md](mbse:mbse-patterns/python3/tests/TestPlan.md), lists every case.
+[Test plan](mbse:mbse-patterns/python3/tests/TestPlan.md), lists every case.

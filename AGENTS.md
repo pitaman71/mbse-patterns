@@ -12,12 +12,12 @@ draw from them, byte-identically from a seed. Characterizers are planned. Two eq
 
 | You want to | Read |
 |---|---|
-| Know why the mbse repositories exist, and this one's part in them | [MBSE.md](MBSE.md) |
-| Use the library: write predicates, validate data, query a store, generate data, apply transforms | The skill, written once: [skills/mbse-patterns/SKILL.md](skills/mbse-patterns/SKILL.md), packaged in each language as [python3/mbse/Patterns/skill/SKILL.md](python3/mbse/Patterns/skill/SKILL.md) and [typescript5/skill/SKILL.md](typescript5/skill/SKILL.md). Each practice links its case in each language's tutorials or tests |
-| Learn it by example, from a constraint to generated test data | [python3/tutorials/README.md](python3/tutorials/README.md), eight case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
+| Know why the mbse repositories exist, and this one's part in them | [Why the mbse repositories exist](MBSE.md) |
+| Use the library: write predicates, validate data, query a store, generate data, apply transforms | The skill, written once: [its source](skills/mbse-patterns/SKILL.md), packaged in each language as [the Python copy](python3/mbse/Patterns/skill/SKILL.md) and [the TypeScript copy](typescript5/skill/SKILL.md). Each practice links its case in each language's tutorials or tests |
+| Learn it by example, from a constraint to generated test data | [Tutorial: constraints, queries and patterns in eight case studies](python3/tutorials/README.md), eight case studies; the same in [typescript5/tutorials/](typescript5/tutorials/README.md) |
 | Understand a design decision, a capability not yet built or an open question | mbse-basis [FEA-023: patterns over data](https://github.com/pitaman71/mbse-basis/blob/main/docs/features/FEA-023.md) and its capabilities' detail files, and [CAP-074: transforms applied step by step](https://github.com/pitaman71/mbse-basis/blob/main/docs/capabilities/CAP-074.md) to [CAP-083: policies with guards and distributions](https://github.com/pitaman71/mbse-basis/blob/main/docs/capabilities/CAP-083.md) for transforms |
-| Change the package | this file, then [docs/EQUIVALENCE.md](docs/EQUIVALENCE.md) |
-| Find or add a test case | [python3/tests/TestPlan.md](python3/tests/TestPlan.md) (TypeScript's plan lists only its differences) |
+| Change the package | this file, then [Equivalence](docs/EQUIVALENCE.md) |
+| Find or add a test case | [Test plan](python3/tests/TestPlan.md) (TypeScript's plan lists only its differences) |
 | Write the constraints themselves | [mbse-expressions' AGENTS.md](https://github.com/pitaman71/mbse-expressions/blob/main/AGENTS.md), in the sibling checkout |
 | Model the data | [mbse-schemas' AGENTS.md](https://github.com/pitaman71/mbse-schemas/blob/main/AGENTS.md), in the sibling checkout |
 
