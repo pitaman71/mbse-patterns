@@ -60,7 +60,8 @@ and skill practices written for what it adds, the same cases in both languages.
 
 1. **A fresh package skeleton.** The old code is removed: every module, its 9 test suites, 8 tutorials, corpus cases
    and skill practices. None is ported; each later stage writes its own anew. Release 0.9.1 stays tagged, for its
-   dependents and as mbse-transforms' precursor.
+   dependents and as mbse-transforms' precursor. What remains is relabeled to CAP-072's new title, "distributions
+   linked to patterns", with mbse-basis' `update_item_titles.py`; the user agreed to this stage for it (2026-11-05).
 2. **Sampling**, carried over.
 3. **Distributions.**
 4. **Generators.**
