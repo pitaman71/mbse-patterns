@@ -15,7 +15,7 @@ dependencies = ["mbse-schemas>=0.10.0,<0.11", "mbse-expressions>=0.5.4,<0.6"]
 yaml = ["mbse-schemas[yaml]>=0.10.0,<0.11"]
 
 [tool.setuptools.package-data]
-"mbse.Patterns" = ["skill/*.md", "skill/references/*.md"]
+"mbse.Patterns" = ["skill/*.md"]
 
 [tool.setuptools.packages.find]
 include = ["mbse*"]
